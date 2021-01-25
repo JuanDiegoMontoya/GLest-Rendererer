@@ -125,7 +125,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)lib\glad\include;$(SolutionDir)lib\glfw-3.3-win64\include;$(SolutionDir)lib;$(SolutionDir)lib\shaderc\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <DisableSpecificWarnings>26812;26451</DisableSpecificWarnings>
-      <Optimization>Disabled</Optimization>
+      <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -166,7 +166,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)lib\glad\include;$(SolutionDir)lib\glfw-3.3-win64\include;$(SolutionDir)lib;$(SolutionDir)lib\shaderc\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <DisableSpecificWarnings>26812;26451</DisableSpecificWarnings>
-      <Optimization>Disabled</Optimization>
+      <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

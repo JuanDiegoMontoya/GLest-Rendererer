@@ -168,9 +168,7 @@ private:
 
   void mainLoop()
   {
-    // create HDR framebuffer and tone mapping buffers
-    std::vector<int> zeros(NUM_BUCKETS, 0);
-    float expo[] = { exposureFactor, 0 };
+    // create HDR framebuffer
     glCreateTextures(GL_TEXTURE_2D, 1, &hdrColor);
     glTextureStorage2D(hdrColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
     glCreateTextures(GL_TEXTURE_2D, 1, &hdrDepth);
@@ -182,8 +180,10 @@ private:
     {
       throw std::runtime_error("Failed to create HDR framebuffer");
     }
-    //exposureBuffer = std::make_unique<GFX::StaticBuffer>(&exposure, 2 * sizeof(float));
-    //histogramBuffer = std::make_unique<GFX::StaticBuffer>(zeros.data(), NUM_BUCKETS * sizeof(int));
+
+    // create tone mapping buffers
+    std::vector<int> zeros(NUM_BUCKETS, 0);
+    float expo[] = { exposureFactor, 0 };
     glCreateBuffers(1, &exposureBuffer);
     glNamedBufferStorage(exposureBuffer, 2 * sizeof(float), expo, 0);
     glCreateBuffers(1, &histogramBuffer);
@@ -199,7 +199,7 @@ private:
     glTextureParameteri(gAlbedoSpec, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(gAlbedoSpec, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glCreateTextures(GL_TEXTURE_2D, 1, &gNormal);
-    glTextureStorage2D(gNormal, 1, GL_RGBA16F, WIDTH, HEIGHT);
+    glTextureStorage2D(gNormal, 1, GL_RG8_SNORM, WIDTH, HEIGHT);
     glTextureParameteri(gNormal, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(gNormal, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glCreateTextures(GL_TEXTURE_2D, 1, &gDepth);
@@ -236,35 +236,35 @@ private:
 
     Shader::shaders["gBuffer"].emplace(Shader(
       {
-        { "Resources/Shaders/gBuffer.vs", GL_VERTEX_SHADER },
-        { "Resources/Shaders/gBuffer.fs", GL_FRAGMENT_SHADER }
+        { "gBuffer.vs", GL_VERTEX_SHADER },
+        { "gBuffer.fs", GL_FRAGMENT_SHADER }
       }));
     Shader::shaders["fstexture"].emplace(Shader(
       {
-        { "Resources/Shaders/fullscreen_tri.vs", GL_VERTEX_SHADER },
-        { "Resources/Shaders/texture.fs", GL_FRAGMENT_SHADER }
+        { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+        { "texture.fs", GL_FRAGMENT_SHADER }
       }));
     Shader::shaders["gPhongGlobal"].emplace(Shader(
       {
-        { "Resources/Shaders/fullscreen_tri.vs", GL_VERTEX_SHADER },
-        { "Resources/Shaders/gPhongGlobal.fs", GL_FRAGMENT_SHADER }
+        { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+        { "gPhongGlobal.fs", GL_FRAGMENT_SHADER }
       }));
     Shader::shaders["gPhongManyLocal"].emplace(Shader(
       {
-        { "Resources/Shaders/lightGeom.vs", GL_VERTEX_SHADER },
-        { "Resources/Shaders/gPhongManyLocal.fs", GL_FRAGMENT_SHADER }
+        { "lightGeom.vs", GL_VERTEX_SHADER },
+        { "gPhongManyLocal.fs", GL_FRAGMENT_SHADER }
       }));
     Shader::shaders["generate_histogram"].emplace(Shader(
-      { { "Resources/Shaders/generate_histogram.cs", GL_COMPUTE_SHADER } }));
+      { { "generate_histogram.cs", GL_COMPUTE_SHADER } }));
+    Shader::shaders["calc_exposure"].emplace(Shader(
+      { { "calc_exposure.cs", GL_COMPUTE_SHADER } }));
     Shader::shaders["tonemap"].emplace(Shader(
       {
-        { "Resources/Shaders/fullscreen_tri.vs", GL_VERTEX_SHADER },
-        { "Resources/Shaders/tonemap.fs", GL_FRAGMENT_SHADER }
+        { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+        { "tonemap.fs", GL_FRAGMENT_SHADER }
       }));
-    Shader::shaders["calc_exposure"].emplace(Shader(
-      { { "Resources/Shaders/calc_exposure.cs", GL_COMPUTE_SHADER } }));
 
-    glClearColor(0, 0.3, 0.6, 0);
+    glClearColor(0, 0.3, 0.7, 0);
 
     Camera cam;
     std::vector<Object> objects;
@@ -275,11 +275,11 @@ private:
     globalLight.direction = glm::vec3(1, -.5, 0);
     globalLight.specular = glm::vec3(.1f);
 
-    int numLights = 5000;
+    int numLights = 10000;
     for (int x = 0; x < numLights; x++)
     {
       PointLight light;
-      light.diffuse = glm::vec4(glm::vec3(rng(0.11, 1), rng(0.1, 1), rng(0.1, 1)), 0.f);
+      light.diffuse = glm::vec4(glm::vec3(rng(0, 1), rng(0, 1), rng(0, 1)), 0.f);
       light.specular = light.diffuse;
       light.position = glm::vec4(glm::vec3(rng(-70, 70), rng(.1f, .6f), rng(-30, 30)), 0.f);
       light.linear = rng(4, 8);
@@ -376,10 +376,11 @@ private:
 
       // local lights pass
       {
-        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ONE);
         glDisable(GL_CULL_FACE);
+        glDepthMask(GL_FALSE);
         //glEnable(GL_CULL_FACE);
         //glCullFace(GL_BACK);
         //glFrontFace(GL_CCW);
@@ -400,7 +401,6 @@ private:
 
       applyTonemapping(dt);
 
-      //glBlitNamedFramebuffer(fbo, 0, 0, 0, 0, 0, WIDTH, HEIGHT, WIDTH, HEIGHT, GL_COLOR_BUFFER_BIT, GL_LINEAR);
       if (Input::IsKeyDown(GLFW_KEY_1))
       {
         drawFSTexture(gPosition);
@@ -444,7 +444,7 @@ private:
     glEnable(GL_FRAMEBUFFER_SRGB);
     glDisable(GL_BLEND);
 
-    glBindTextureUnit(1, hdrColor); // HDR buffer
+    glBindTextureUnit(1, hdrColor);
 
     const float logLowLum = glm::log(targetLuminance / maxExposure);
     const float logMaxLum = glm::log(targetLuminance / minExposure);
@@ -459,7 +459,6 @@ private:
       const int Y_SIZE = 32;
       int xgroups = (WIDTH + X_SIZE - 1) / X_SIZE;
       int ygroups = (HEIGHT + Y_SIZE - 1) / Y_SIZE;
-      //histogramBuffer->Bind<GFX::Target::SSBO>(0);
       glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer);
       glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, histogramBuffer);
       glDispatchCompute(xgroups, ygroups, 1);
@@ -471,15 +470,12 @@ private:
     //printf("Exposure: %f\n", expo);
 
     {
-      //exposureBuffer->Bind<GFX::Target::SSBO>(0);
-      //histogramBuffer->Bind<GFX::Target::SSBO>(1);
       glBindBuffer(GL_SHADER_STORAGE_BUFFER, exposureBuffer);
       glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, exposureBuffer);
       glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer);
       glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer);
       auto& cshdr = Shader::shaders["calc_exposure"];
       cshdr->Bind();
-      //cshdr->setFloat("u_targetLuminance", targetLuminance);
       cshdr->SetFloat("u_dt", dt);
       cshdr->SetFloat("u_adjustmentSpeed", adjustmentSpeed);
       cshdr->SetInt("u_hdrBuffer", 1);
@@ -495,12 +491,14 @@ private:
     auto& shdr = Shader::shaders["tonemap"];
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
     shdr->Bind();
     shdr->SetFloat("u_exposureFactor", exposureFactor);
     shdr->SetInt("u_hdrBuffer", 1);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+    glDepthMask(GL_TRUE);
 
     glDisable(GL_FRAMEBUFFER_SRGB);
   }

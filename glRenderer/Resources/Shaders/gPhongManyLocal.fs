@@ -1,4 +1,5 @@
 #version 460 core
+#include "common.h"
 
 #define SHININESS 64.0f
 #define SPECULAR_STRENGTH 1
@@ -47,12 +48,13 @@ void main()
   albedo = texture(gAlbedoSpec, texCoord).rgb;
   specular = texture(gAlbedoSpec, texCoord).a;
   vPos = texture(gPosition, texCoord).xyz;
-  vec3 vNormal = texture(gNormal, texCoord).xyz;
+  vec3 vNormal = oct_to_float32x3(texture(gNormal, texCoord).xy);
 
   float distanceToLightSquared = dot(vPos - lights[vInstanceID].position.xyz, vPos - lights[vInstanceID].position.xyz);
   if (vNormal == vec3(0) || distanceToLightSquared > lights[vInstanceID].radiusSquared)
   {
-    discard;
+    fragColor = vec4(0);
+    return;
   }
 
   vec3 pixelPos = WorldPosFromDepth(0.0);
@@ -60,7 +62,8 @@ void main()
   if ((gl_FrontFacing == true && pixelDistanceToLightSquared < lights[vInstanceID].radiusSquared) || 
     gl_FrontFacing == false && pixelDistanceToLightSquared >= lights[vInstanceID].radiusSquared)
   {
-    discard;
+    fragColor = vec4(0);
+    return;
   }
 
   vec3 normal = normalize(vNormal);

@@ -1,4 +1,5 @@
 #version 460 core
+#include "common.h"
 
 #define SHININESS 64.0f
 #define SPECULAR_STRENGTH 5
@@ -27,7 +28,7 @@ void main()
   vec3 albedo = texture(gAlbedoSpec, vTexCoord).rgb;
   float specular = texture(gAlbedoSpec, vTexCoord).a;
   vec3 vPos = texture(gPosition, vTexCoord).xyz;
-  vec3 vNormal = texture(gNormal, vTexCoord).xyz;
+  vec3 vNormal = oct_to_float32x3(texture(gNormal, vTexCoord).xy);
 
   if (vNormal == vec3(0))
   {

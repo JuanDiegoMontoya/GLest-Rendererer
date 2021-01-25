@@ -138,7 +138,7 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
 // loads a shader source into a string (string_view doesn't support concatenation)
 std::string Shader::loadFile(std::string path)
 {
-  std::string shaderpath = path;
+  std::string shaderpath = "Resources/Shaders/" + path;
   std::string content;
   try
   {
