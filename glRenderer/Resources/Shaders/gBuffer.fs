@@ -29,5 +29,5 @@ void main()
 #endif
   //gAlbedoSpec.rgb = texture(u_object.diffuse, vTexCoord).rgb;
   //gAlbedoSpec.a = texture(u_object.specular, vTexCoord).r;
-  gAlbedoSpec = vec4(.5, .7, .7, .1);
+  gAlbedoSpec = vec4(.9, .9, .9, .25);
 }

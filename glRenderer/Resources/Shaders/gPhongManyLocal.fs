@@ -67,7 +67,7 @@ void main()
   vec3 viewDir = normalize(u_viewPos - vPos);
   vec3 local = CalcPointLight(lights[vInstanceID], normal, viewDir);
 
-  fragColor = vec4(local, 0.0);
+  fragColor = vec4(local, 0.0) * smoothstep(lights[vInstanceID].radiusSquared, .7 * lights[vInstanceID].radiusSquared, distanceToLightSquared);
 }
 
 vec3 CalcLocalColor(PointLight light, vec3 lightDir, vec3 normal, vec3 viewDir)

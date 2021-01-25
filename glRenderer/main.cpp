@@ -168,6 +168,28 @@ private:
 
   void mainLoop()
   {
+    // create HDR framebuffer and tone mapping buffers
+    std::vector<int> zeros(NUM_BUCKETS, 0);
+    float expo[] = { exposureFactor, 0 };
+    glCreateTextures(GL_TEXTURE_2D, 1, &hdrColor);
+    glTextureStorage2D(hdrColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
+    glCreateTextures(GL_TEXTURE_2D, 1, &hdrDepth);
+    glTextureStorage2D(hdrDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
+    glCreateFramebuffers(1, &hdrfbo);
+    glNamedFramebufferTexture(hdrfbo, GL_COLOR_ATTACHMENT0, hdrColor, 0);
+    glNamedFramebufferTexture(hdrfbo, GL_DEPTH_ATTACHMENT, hdrDepth, 0);
+    if (GLenum status = glCheckNamedFramebufferStatus(hdrfbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+    {
+      throw std::runtime_error("Failed to create HDR framebuffer");
+    }
+    //exposureBuffer = std::make_unique<GFX::StaticBuffer>(&exposure, 2 * sizeof(float));
+    //histogramBuffer = std::make_unique<GFX::StaticBuffer>(zeros.data(), NUM_BUCKETS * sizeof(int));
+    glCreateBuffers(1, &exposureBuffer);
+    glNamedBufferStorage(exposureBuffer, 2 * sizeof(float), expo, 0);
+    glCreateBuffers(1, &histogramBuffer);
+    glNamedBufferStorage(histogramBuffer, NUM_BUCKETS * sizeof(int), zeros.data(), 0);
+
+    // create texture attachments for gBuffer FBO
     glCreateTextures(GL_TEXTURE_2D, 1, &gPosition);
     glTextureStorage2D(gPosition, 1, GL_RGBA32F, WIDTH, HEIGHT);
     glTextureParameteri(gPosition, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -183,15 +205,15 @@ private:
     glCreateTextures(GL_TEXTURE_2D, 1, &gDepth);
     glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
 
-    glCreateFramebuffers(1, &fbo);
-    glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT0, gPosition, 0);
-    glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT1, gAlbedoSpec, 0);
-    glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT2, gNormal, 0);
-    glNamedFramebufferTexture(fbo, GL_DEPTH_ATTACHMENT, gDepth, 0);
+    // create gBuffer FBO
+    glCreateFramebuffers(1, &gfbo);
+    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT0, gPosition, 0);
+    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT1, gAlbedoSpec, 0);
+    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT2, gNormal, 0);
+    glNamedFramebufferTexture(gfbo, GL_DEPTH_ATTACHMENT, gDepth, 0);
     GLenum buffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-    glNamedFramebufferDrawBuffers(fbo, 3, buffers);
-    
-    if (GLenum status = glCheckNamedFramebufferStatus(fbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+    glNamedFramebufferDrawBuffers(gfbo, 3, buffers);
+    if (GLenum status = glCheckNamedFramebufferStatus(gfbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
     {
       throw std::runtime_error("Failed to create framebuffer");
     }
@@ -227,33 +249,42 @@ private:
         { "Resources/Shaders/fullscreen_tri.vs", GL_VERTEX_SHADER },
         { "Resources/Shaders/gPhongGlobal.fs", GL_FRAGMENT_SHADER }
       }));
-    Shader::shaders["gPhongManyLocale"].emplace(Shader(
+    Shader::shaders["gPhongManyLocal"].emplace(Shader(
       {
         { "Resources/Shaders/lightGeom.vs", GL_VERTEX_SHADER },
         { "Resources/Shaders/gPhongManyLocal.fs", GL_FRAGMENT_SHADER }
       }));
+    Shader::shaders["generate_histogram"].emplace(Shader(
+      { { "Resources/Shaders/generate_histogram.cs", GL_COMPUTE_SHADER } }));
+    Shader::shaders["tonemap"].emplace(Shader(
+      {
+        { "Resources/Shaders/fullscreen_tri.vs", GL_VERTEX_SHADER },
+        { "Resources/Shaders/tonemap.fs", GL_FRAGMENT_SHADER }
+      }));
+    Shader::shaders["calc_exposure"].emplace(Shader(
+      { { "Resources/Shaders/calc_exposure.cs", GL_COMPUTE_SHADER } }));
 
-    glClearColor(0, .3, .6, 1);
+    glClearColor(0, 0.3, 0.6, 0);
 
     Camera cam;
     std::vector<Object> objects;
     std::vector<PointLight> localLights;
     DirLight globalLight;
-    globalLight.ambient = glm::vec3(.1f);
-    globalLight.diffuse = glm::vec3(.8f);
-    globalLight.direction = glm::vec3(.3, -1, 0);
-    globalLight.specular = glm::vec3(1);
+    globalLight.ambient = glm::vec3(.01f);
+    globalLight.diffuse = glm::vec3(.3f);
+    globalLight.direction = glm::vec3(1, -.5, 0);
+    globalLight.specular = glm::vec3(.1f);
 
-    int numLights = 20000;
+    int numLights = 5000;
     for (int x = 0; x < numLights; x++)
     {
       PointLight light;
-      light.diffuse = glm::vec4(glm::vec3(rng(0, 1), rng(0, 1), rng(0, 1)), 0.f);
+      light.diffuse = glm::vec4(glm::vec3(rng(0.11, 1), rng(0.1, 1), rng(0.1, 1)), 0.f);
       light.specular = light.diffuse;
       light.position = glm::vec4(glm::vec3(rng(-70, 70), rng(.1f, .6f), rng(-30, 30)), 0.f);
-      light.linear = rng(4, 10);
-      light.quadratic = rng(5, 12);
-      light.radiusSquared = light.CalcRadiusSquared(.015f);
+      light.linear = rng(4, 8);
+      light.quadratic = 0;// rng(5, 12);
+      light.radiusSquared = light.CalcRadiusSquared(.0125f);
       localLights.push_back(light);
     }
     GLuint lightSSBO{};
@@ -295,7 +326,7 @@ private:
 
       objects[1].rotation = glm::rotate(objects[1].rotation, glm::radians(45.f) * dt, glm::vec3(0, 1, 0));
 
-      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+      glBindFramebuffer(GL_FRAMEBUFFER, gfbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       glBindVertexArray(vao);
 
@@ -320,7 +351,7 @@ private:
         }
       }
 
-      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       glBindTextureUnit(0, gPosition);
       glBindTextureUnit(1, gNormal);
@@ -352,7 +383,7 @@ private:
         //glEnable(GL_CULL_FACE);
         //glCullFace(GL_BACK);
         //glFrontFace(GL_CCW);
-        auto& gPhongLocal = Shader::shaders["gPhongManyLocale"];
+        auto& gPhongLocal = Shader::shaders["gPhongManyLocal"];
         gPhongLocal->Bind();
         gPhongLocal->SetMat4("u_viewProj", cam.GetViewProj());
         gPhongLocal->SetMat4("u_invProj", glm::inverse(cam.GetProj()));
@@ -365,22 +396,9 @@ private:
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, lightSSBO);
         glVertexArrayVertexBuffer(vao, 0, meshes[1].GetID(), 0, sizeof(Vertex));
         glDrawArraysInstanced(GL_TRIANGLES, 0, meshes[1].GetVertexCount(), localLights.size());
-        //for (const auto& light : localLights)
-        //{ 
-        //  glm::mat4 model(1);
-        //  model = glm::translate(model, glm::vec3(light.position));
-        //  float radiusSquared = light.CalcRadiusSquared(0.03f);
-        //  model = glm::scale(model, glm::vec3(glm::sqrt(radiusSquared)));
-        //  gPhongLocal->SetMat4("u_model", model);
-        //  gPhongLocal->SetFloat("u_light.radiusSquared", radiusSquared);
-        //  gPhongLocal->SetVec4("u_light.diffuse", light.diffuse);
-        //  gPhongLocal->SetVec4("u_light.specular", light.specular);
-        //  gPhongLocal->SetVec4("u_light.position", light.position);
-        //  gPhongLocal->SetFloat("u_light.linear", light.linear);
-        //  gPhongLocal->SetFloat("u_light.quadratic", light.quadratic);
-        //  glDrawArrays(GL_TRIANGLES, 0, meshes[1].GetVertexCount());
-        //}
       }
+
+      applyTonemapping(dt);
 
       //glBlitNamedFramebuffer(fbo, 0, 0, 0, 0, 0, WIDTH, HEIGHT, WIDTH, HEIGHT, GL_COLOR_BUFFER_BIT, GL_LINEAR);
       if (Input::IsKeyDown(GLFW_KEY_1))
@@ -420,17 +438,97 @@ private:
     glDrawArrays(GL_TRIANGLES, 0, 3);
   }
 
+  void applyTonemapping(float dt)
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_FRAMEBUFFER_SRGB);
+    glDisable(GL_BLEND);
+
+    glBindTextureUnit(1, hdrColor); // HDR buffer
+
+    const float logLowLum = glm::log(targetLuminance / maxExposure);
+    const float logMaxLum = glm::log(targetLuminance / minExposure);
+
+    {
+      auto& hshdr = Shader::shaders["generate_histogram"];
+      hshdr->Bind();
+      hshdr->SetInt("u_hdrBuffer", 1);
+      hshdr->SetFloat("u_logLowLum", logLowLum);
+      hshdr->SetFloat("u_logMaxLum", logMaxLum);
+      const int X_SIZE = 32;
+      const int Y_SIZE = 32;
+      int xgroups = (WIDTH + X_SIZE - 1) / X_SIZE;
+      int ygroups = (HEIGHT + Y_SIZE - 1) / Y_SIZE;
+      //histogramBuffer->Bind<GFX::Target::SSBO>(0);
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, histogramBuffer);
+      glDispatchCompute(xgroups, ygroups, 1);
+      glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    }
+
+    //float expo{};
+    //glGetNamedBufferSubData(exposureBuffer, 0, sizeof(float), &expo);
+    //printf("Exposure: %f\n", expo);
+
+    {
+      //exposureBuffer->Bind<GFX::Target::SSBO>(0);
+      //histogramBuffer->Bind<GFX::Target::SSBO>(1);
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, exposureBuffer);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, exposureBuffer);
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer);
+      auto& cshdr = Shader::shaders["calc_exposure"];
+      cshdr->Bind();
+      //cshdr->setFloat("u_targetLuminance", targetLuminance);
+      cshdr->SetFloat("u_dt", dt);
+      cshdr->SetFloat("u_adjustmentSpeed", adjustmentSpeed);
+      cshdr->SetInt("u_hdrBuffer", 1);
+      cshdr->SetFloat("u_logLowLum", logLowLum);
+      cshdr->SetFloat("u_logMaxLum", logMaxLum);
+      cshdr->SetFloat("u_targetLuminance", targetLuminance);
+      glDispatchCompute(1, 1, 1);
+      glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    }
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glViewport(0, 0, WIDTH, HEIGHT);
+    auto& shdr = Shader::shaders["tonemap"];
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    shdr->Bind();
+    shdr->SetFloat("u_exposureFactor", exposureFactor);
+    shdr->SetInt("u_hdrBuffer", 1);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_CULL_FACE);
+
+    glDisable(GL_FRAMEBUFFER_SRGB);
+  }
+
   void cleanup()
   {
     glfwDestroyWindow(window);
     glfwTerminate();
   }
 
+  // common
   GLFWwindow* window{};
   const uint32_t WIDTH = 1440;
   const uint32_t HEIGHT = 810;
-  GLuint fbo{}, gPosition{}, gAlbedoSpec{}, gNormal{}, gDepth{};
   std::vector<Mesh> meshes;
+
+  // deferred stuff
+  GLuint gfbo{}, gPosition{}, gAlbedoSpec{}, gNormal{}, gDepth{};
+
+  // HDR stuff
+  GLuint hdrfbo{}, hdrColor{}, hdrDepth{};
+  GLuint histogramBuffer{}, exposureBuffer{};
+  float targetLuminance = .22f;
+  float minExposure = .25f;
+  float maxExposure = 10.0f;
+  float exposureFactor = 1.0f;
+  float adjustmentSpeed = 2.0f;
+  const int NUM_BUCKETS = 128;
 };
 
 int main()

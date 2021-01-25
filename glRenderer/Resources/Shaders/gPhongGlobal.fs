@@ -31,8 +31,7 @@ void main()
 
   if (vNormal == vec3(0))
   {
-    fragColor = vec4(0);
-    return;
+    discard;
   }
 
   vec3 viewDir = normalize(u_viewPos - vPos);
