@@ -1,7 +1,6 @@
 #version 460 core
 #include "common.h"
 
-#define SHININESS 64.0f
 #define SPECULAR_STRENGTH 5
 
 struct DirLight
@@ -19,7 +18,8 @@ layout (location = 0) uniform vec3 u_viewPos;
 layout (location = 1) uniform sampler2D gPosition;
 layout (location = 2) uniform sampler2D gNormal;
 layout (location = 3) uniform sampler2D gAlbedoSpec;
-layout (location = 4) uniform DirLight u_globalLight;
+layout (location = 4) uniform sampler2D gShininess;
+layout (location = 5) uniform DirLight u_globalLight;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -29,6 +29,8 @@ void main()
   float specular = texture(gAlbedoSpec, vTexCoord).a;
   vec3 vPos = texture(gPosition, vTexCoord).xyz;
   vec3 vNormal = oct_to_float32x3(texture(gNormal, vTexCoord).xy);
+  //vec3 vNormal = texture(gNormal, vTexCoord).xyz;
+  float shininess = texture(gShininess, vTexCoord).r;
 
   if (vNormal == vec3(0))
   {
@@ -44,7 +46,7 @@ void main()
   // specular shading
   float spec = 0;
   vec3 reflectDir = reflect(-lightDir, vNormal);
-  spec = pow(max(dot(viewDir, reflectDir), 0.0), SHININESS) * SPECULAR_STRENGTH;
+  spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess) * SPECULAR_STRENGTH;
   
   // combine results
   vec3 ambient = u_globalLight.ambient * albedo;

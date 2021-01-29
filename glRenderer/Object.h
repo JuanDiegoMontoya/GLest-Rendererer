@@ -24,6 +24,6 @@ struct Object
   glm::quat rotation{1, 0, 0, 0};
   glm::vec3 scale{};
 
-  Mesh* mesh;
+  std::vector<Mesh*> meshes;
 };
 

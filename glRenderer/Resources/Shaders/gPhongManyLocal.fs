@@ -1,7 +1,6 @@
 #version 460 core
 #include "common.h"
 
-#define SHININESS 64.0f
 #define SPECULAR_STRENGTH 1
 
 struct PointLight
@@ -28,6 +27,7 @@ layout (location = 2) uniform vec3 u_viewPos;
 layout (location = 4) uniform sampler2D gPosition;
 layout (location = 5) uniform sampler2D gNormal;
 layout (location = 6) uniform sampler2D gAlbedoSpec;
+layout (location = 9) uniform sampler2D gShininess;
 layout (location = 7) uniform mat4 u_invProj;
 layout (location = 8) uniform mat4 u_invView;
 //layout (location = 9) uniform PointSpotLight u_light;
@@ -42,13 +42,16 @@ vec3 WorldPosFromDepth(float depth);
 vec3 albedo;
 float specular;
 vec3 vPos;
+float shininess;
 void main()
 {
   vec2 texCoord = gl_FragCoord.xy / textureSize(gPosition, 0).xy;
   albedo = texture(gAlbedoSpec, texCoord).rgb;
   specular = texture(gAlbedoSpec, texCoord).a;
   vPos = texture(gPosition, texCoord).xyz;
+  shininess = texture(gShininess, texCoord).r;
   vec3 vNormal = oct_to_float32x3(texture(gNormal, texCoord).xy);
+  //vec3 vNormal = texture(gNormal, texCoord).xyz;
 
   float distanceToLightSquared = dot(vPos - lights[vInstanceID].position.xyz, vPos - lights[vInstanceID].position.xyz);
   if (vNormal == vec3(0) || distanceToLightSquared > lights[vInstanceID].radiusSquared)
@@ -70,7 +73,9 @@ void main()
   vec3 viewDir = normalize(u_viewPos - vPos);
   vec3 local = CalcPointLight(lights[vInstanceID], normal, viewDir);
 
-  fragColor = vec4(local, 0.0) * smoothstep(lights[vInstanceID].radiusSquared, .7 * lights[vInstanceID].radiusSquared, distanceToLightSquared);
+  fragColor = vec4(local, 0.0) * smoothstep((lights[vInstanceID].radiusSquared), .4 * (lights[vInstanceID].radiusSquared), (distanceToLightSquared));
+  //fragColor = vec4(clamp(mix(local, vec3(0.0), distanceToLightSquared / lights[vInstanceID].radiusSquared), 0.0, 1.0), 0.0);
+  //fragColor = vec4(local, 0.0);
 }
 
 vec3 CalcLocalColor(PointLight light, vec3 lightDir, vec3 normal, vec3 viewDir)
@@ -79,7 +84,7 @@ vec3 CalcLocalColor(PointLight light, vec3 lightDir, vec3 normal, vec3 viewDir)
   
   float spec = 0;
   vec3 reflectDir = reflect(-lightDir, normal);
-  spec = pow(max(dot(viewDir, reflectDir), 0.0), SHININESS) * SPECULAR_STRENGTH;
+  spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess) * SPECULAR_STRENGTH;
   
   vec3 diffuse  = (light.diffuse.xyz)  * diff * albedo;
   vec3 specu = light.specular.xyz * spec * specular;

@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <vector>
 #include <chrono>
+#include <algorithm>
 
 #include "Mesh.h"
 #include "Shader.h"
@@ -192,16 +193,13 @@ private:
     // create texture attachments for gBuffer FBO
     glCreateTextures(GL_TEXTURE_2D, 1, &gPosition);
     glTextureStorage2D(gPosition, 1, GL_RGBA32F, WIDTH, HEIGHT);
-    glTextureParameteri(gPosition, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(gPosition, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glCreateTextures(GL_TEXTURE_2D, 1, &gAlbedoSpec);
     glTextureStorage2D(gAlbedoSpec, 1, GL_RGBA8, WIDTH, HEIGHT);
-    glTextureParameteri(gAlbedoSpec, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(gAlbedoSpec, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glCreateTextures(GL_TEXTURE_2D, 1, &gNormal);
     glTextureStorage2D(gNormal, 1, GL_RG8_SNORM, WIDTH, HEIGHT);
-    glTextureParameteri(gNormal, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(gNormal, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    //glTextureStorage2D(gNormal, 1, GL_RGBA8_SNORM, WIDTH, HEIGHT);
+    glCreateTextures(GL_TEXTURE_2D, 1, &gShininess);
+    glTextureStorage2D(gShininess, 1, GL_R16F, WIDTH, HEIGHT);
     glCreateTextures(GL_TEXTURE_2D, 1, &gDepth);
     glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
 
@@ -210,29 +208,35 @@ private:
     glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT0, gPosition, 0);
     glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT1, gAlbedoSpec, 0);
     glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT2, gNormal, 0);
+    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT3, gShininess, 0);
     glNamedFramebufferTexture(gfbo, GL_DEPTH_ATTACHMENT, gDepth, 0);
-    GLenum buffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-    glNamedFramebufferDrawBuffers(gfbo, 3, buffers);
+    GLenum buffers[] = { GL_COLOR_ATTACHMENT0, 
+      GL_COLOR_ATTACHMENT1, 
+      GL_COLOR_ATTACHMENT2, 
+      GL_COLOR_ATTACHMENT3 };
+    glNamedFramebufferDrawBuffers(gfbo, _countof(buffers), buffers);
     if (GLenum status = glCheckNamedFramebufferStatus(gfbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
     {
       throw std::runtime_error("Failed to create framebuffer");
     }
 
-    meshes.emplace_back("Resources/Models/sponza/sponza.obj");
-    meshes.emplace_back("Resources/Models/goodSphere.obj");
-
     GLuint vao;
     glCreateVertexArrays(1, &vao);
-    glVertexArrayVertexBuffer(vao, 0, meshes[0].GetID(), 0, sizeof(Vertex));
     glEnableVertexArrayAttrib(vao, 0);
     glEnableVertexArrayAttrib(vao, 1);
     glEnableVertexArrayAttrib(vao, 2);
+    glEnableVertexArrayAttrib(vao, 3);
+    glEnableVertexArrayAttrib(vao, 4);
     glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, position));
     glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, normal));
     glVertexArrayAttribFormat(vao, 2, 2, GL_FLOAT, GL_FALSE, offsetof(Vertex, uv));
+    glVertexArrayAttribFormat(vao, 3, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, tangent));
+    glVertexArrayAttribFormat(vao, 4, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, bitangent));
     glVertexArrayAttribBinding(vao, 0, 0);
     glVertexArrayAttribBinding(vao, 1, 0);
     glVertexArrayAttribBinding(vao, 2, 0);
+    glVertexArrayAttribBinding(vao, 3, 0);
+    glVertexArrayAttribBinding(vao, 4, 0);
 
     Shader::shaders["gBuffer"].emplace(Shader(
       {
@@ -264,35 +268,45 @@ private:
         { "tonemap.fs", GL_FRAGMENT_SHADER }
       }));
 
-    glClearColor(0, 0.3, 0.7, 0);
+    glClearColor(0, 0, 0, 0);
 
+    // make default camera
     Camera cam;
-    std::vector<Object> objects;
+
+    // setup lighting
     std::vector<PointLight> localLights;
+    float sunPosition = 0;
     DirLight globalLight;
-    globalLight.ambient = glm::vec3(.01f);
+    globalLight.ambient = glm::vec3(.010f);
     globalLight.diffuse = glm::vec3(.3f);
     globalLight.direction = glm::vec3(1, -.5, 0);
-    globalLight.specular = glm::vec3(.1f);
+    globalLight.specular = glm::vec3(.01f);
 
-    int numLights = 10000;
+    int numLights = 5000;
     for (int x = 0; x < numLights; x++)
     {
       PointLight light;
       light.diffuse = glm::vec4(glm::vec3(rng(0, 1), rng(0, 1), rng(0, 1)), 0.f);
       light.specular = light.diffuse;
       light.position = glm::vec4(glm::vec3(rng(-70, 70), rng(.1f, .6f), rng(-30, 30)), 0.f);
-      light.linear = rng(4, 8);
+      light.linear = rng(2, 8);
       light.quadratic = 0;// rng(5, 12);
-      light.radiusSquared = light.CalcRadiusSquared(.0125f);
+      light.radiusSquared = light.CalcRadiusSquared(.010f);
       localLights.push_back(light);
     }
     GLuint lightSSBO{};
     glCreateBuffers(1, &lightSSBO);
     glNamedBufferStorage(lightSSBO, localLights.size() * sizeof(PointLight), localLights.data(), GL_DYNAMIC_STORAGE_BIT);
 
+    // setup geometry
+    std::vector<Mesh> terrainMeshes = LoadObj("Resources/Models/sponza/sponza.obj");
+    std::vector<Mesh> tmpSphere = LoadObj("Resources/Models/goodSphere.obj");
+    Mesh& sphere = tmpSphere[0];
+
+    std::vector<Object> objects;
     Object terrain;
-    terrain.mesh = &meshes[0];
+    std::for_each(terrainMeshes.begin(), terrainMeshes.end(), 
+      [&terrain](auto& mesh) { terrain.meshes.push_back(&mesh); });
     terrain.scale = glm::vec3(.05f);
     objects.push_back(terrain);
 
@@ -300,7 +314,7 @@ private:
     for (int i = 0; i < num_objects; i++)
     {
       Object a;
-      a.mesh = &meshes[1];
+      a.meshes = { &sphere };
       a.rotation;
       a.translation = 2.0f * glm::vec3(glm::cos(glm::two_pi<float>() / num_objects * i), 1.0f, glm::sin(glm::two_pi<float>() / num_objects * i));
       a.scale = glm::vec3(1.0f);
@@ -324,6 +338,14 @@ private:
       Input::Update();
       cam.Update(dt);
 
+      if (Input::IsKeyDown(GLFW_KEY_E))
+      {
+        sunPosition += dt;
+        globalLight.direction.x = glm::cos(sunPosition);
+        globalLight.direction.y = glm::sin(sunPosition);
+        globalLight.direction.z = .2f;
+      }
+
       objects[1].rotation = glm::rotate(objects[1].rotation, glm::radians(45.f) * dt, glm::vec3(0, 1, 0));
 
       glBindFramebuffer(GL_FRAMEBUFFER, gfbo);
@@ -335,6 +357,10 @@ private:
         auto& gBufferShader = Shader::shaders["gBuffer"];
         gBufferShader->Bind();
         gBufferShader->SetMat4("u_viewProj", cam.GetViewProj());
+        gBufferShader->SetInt("u_object.diffuse", 0);
+        gBufferShader->SetInt("u_object.alpha", 1);
+        gBufferShader->SetInt("u_object.specular", 2);
+        gBufferShader->SetInt("u_object.normal", 3);
 
         glDisable(GL_BLEND);
         glEnable(GL_CULL_FACE);
@@ -344,10 +370,21 @@ private:
         glDepthMask(GL_TRUE);
         for (const auto& obj : objects)
         {
-          glVertexArrayVertexBuffer(vao, 0, obj.mesh->GetID(), 0, sizeof(Vertex));
           gBufferShader->SetMat4("u_model", obj.GetModelMatrix());
           gBufferShader->SetMat3("u_normalMatrix", obj.GetNormalMatrix());
-          glDrawArrays(GL_TRIANGLES, 0, obj.mesh->GetVertexCount());
+          for (const auto& mesh : obj.meshes)
+          {
+            glVertexArrayVertexBuffer(vao, 0, mesh->GetID(), 0, sizeof(Vertex));
+            gBufferShader->SetBool("u_object.hasSpecular", mesh->GetMaterial().hasSpecular);
+            gBufferShader->SetBool("u_object.hasAlpha", mesh->GetMaterial().hasAlpha);
+            gBufferShader->SetBool("u_object.hasNormal", mesh->GetMaterial().hasNormal);
+            gBufferShader->SetFloat("u_object.shininess", mesh->GetMaterial().shininess);
+            glBindTextureUnit(0, mesh->GetMaterial().diffuseTex->GetID());
+            glBindTextureUnit(1, mesh->GetMaterial().alphaMaskTex->GetID());
+            glBindTextureUnit(2, mesh->GetMaterial().specularTex->GetID());
+            glBindTextureUnit(3, mesh->GetMaterial().normalTex->GetID());
+            glDrawArrays(GL_TRIANGLES, 0, mesh->GetVertexCount());
+          }
         }
       }
 
@@ -356,6 +393,7 @@ private:
       glBindTextureUnit(0, gPosition);
       glBindTextureUnit(1, gNormal);
       glBindTextureUnit(2, gAlbedoSpec);
+      glBindTextureUnit(3, gShininess);
 
       // global light pass
       {
@@ -366,6 +404,7 @@ private:
         gPhongGlobal->SetInt("gPosition", 0);
         gPhongGlobal->SetInt("gNormal", 1);
         gPhongGlobal->SetInt("gAlbedoSpec", 2);
+        gPhongGlobal->SetInt("gShininess", 3);
         gPhongGlobal->SetVec3("u_viewPos", cam.GetPos());
         gPhongGlobal->SetVec3("u_globalLight.ambient", globalLight.ambient);
         gPhongGlobal->SetVec3("u_globalLight.diffuse", globalLight.diffuse);
@@ -392,11 +431,12 @@ private:
         gPhongLocal->SetInt("gPosition", 0);
         gPhongLocal->SetInt("gNormal", 1);
         gPhongLocal->SetInt("gAlbedoSpec", 2);
+        gPhongLocal->SetInt("gShininess", 3);
         gPhongLocal->SetVec3("u_viewPos", cam.GetPos());
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, lightSSBO);
-        glVertexArrayVertexBuffer(vao, 0, meshes[1].GetID(), 0, sizeof(Vertex));
-        glDrawArraysInstanced(GL_TRIANGLES, 0, meshes[1].GetVertexCount(), localLights.size());
+        glVertexArrayVertexBuffer(vao, 0, sphere.GetID(), 0, sizeof(Vertex));
+        glDrawArraysInstanced(GL_TRIANGLES, 0, sphere.GetVertexCount(), localLights.size());
       }
 
       applyTonemapping(dt);
@@ -416,6 +456,10 @@ private:
       if (Input::IsKeyDown(GLFW_KEY_4))
       {
         drawFSTexture(gDepth);
+      }
+      if (Input::IsKeyDown(GLFW_KEY_5))
+      {
+        drawFSTexture(gShininess);
       }
 
       if (Input::IsKeyDown(GLFW_KEY_ESCAPE))
@@ -513,17 +557,16 @@ private:
   GLFWwindow* window{};
   const uint32_t WIDTH = 1440;
   const uint32_t HEIGHT = 810;
-  std::vector<Mesh> meshes;
 
   // deferred stuff
-  GLuint gfbo{}, gPosition{}, gAlbedoSpec{}, gNormal{}, gDepth{};
+  GLuint gfbo{}, gPosition{}, gAlbedoSpec{}, gNormal{}, gDepth{}, gShininess{};
 
   // HDR stuff
   GLuint hdrfbo{}, hdrColor{}, hdrDepth{};
   GLuint histogramBuffer{}, exposureBuffer{};
   float targetLuminance = .22f;
   float minExposure = .25f;
-  float maxExposure = 10.0f;
+  float maxExposure = 20.0f;
   float exposureFactor = 1.0f;
   float adjustmentSpeed = 2.0f;
   const int NUM_BUCKETS = 128;
