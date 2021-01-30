@@ -9,7 +9,7 @@ layout (location = 0) out vec2 vTexCoord;
 vec2 CreateTri(uint vertexID) // GL_TRIANGLES
 {
   uint b = 1 << vertexID;
-  return vec2((0x1 & b) != 0, (0x4 & b) != 0);
+  return vec2((0x4 & b) != 0, (0x1 & b) != 0);
 }
 
 void main()
