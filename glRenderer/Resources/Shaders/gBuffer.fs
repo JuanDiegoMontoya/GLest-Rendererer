@@ -15,11 +15,10 @@ struct Material
   float shininess;
 };
 
-// texture buffers
-layout (location = 0) out vec4 gPosition;
-layout (location = 1) out vec4 gAlbedoSpec;
-layout (location = 2) out vec2 gNormal;
-layout (location = 3) out float gShininess;
+// render textures
+layout (location = 0) out vec4 gAlbedoSpec;
+layout (location = 1) out vec2 gNormal;
+layout (location = 2) out float gShininess;
 
 layout (location = 0) in vec3 vPos;
 layout (location = 1) in vec3 vNormal;
@@ -40,11 +39,9 @@ void main()
     normal = texture(u_object.normal, vTexCoord).rgb * 2.0 - 1.0;
     normal = TBN * normal;
   }
-  gPosition = vec4(vPos, 1.0);
   gNormal = float32x3_to_oct(normalize(normal));
   //gNormal.xyz = normalize(normal);
 #if VISUALIZE_MAPS
-  gPosition = vec4(normalize(vPos) * .5 + .5, 1.0);
   //gNormal = float32x3_to_oct(normalize(normal) * .5 + .5);
   gNormal.xyz = (normalize(normal) * .5 + .5);
 #endif

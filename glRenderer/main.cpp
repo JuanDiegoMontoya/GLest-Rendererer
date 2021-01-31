@@ -177,9 +177,20 @@ private:
     glCreateFramebuffers(1, &hdrfbo);
     glNamedFramebufferTexture(hdrfbo, GL_COLOR_ATTACHMENT0, hdrColor, 0);
     glNamedFramebufferTexture(hdrfbo, GL_DEPTH_ATTACHMENT, hdrDepth, 0);
+    glNamedFramebufferDrawBuffer(hdrfbo, GL_COLOR_ATTACHMENT0);
     if (GLenum status = glCheckNamedFramebufferStatus(hdrfbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
     {
       throw std::runtime_error("Failed to create HDR framebuffer");
+    }
+
+    // create postprocess (HDR) framebuffer
+    glCreateTextures(GL_TEXTURE_2D, 1, &postprocessColor);
+    glTextureStorage2D(postprocessColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
+    glCreateFramebuffers(1, &postprocessFbo);
+    glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, postprocessColor, 0);
+    if (GLenum status = glCheckNamedFramebufferStatus(postprocessFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+    {
+      throw std::runtime_error("Failed to create postprocess framebuffer");
     }
 
     // create tone mapping buffers
@@ -209,29 +220,25 @@ private:
     }
 
     // create texture attachments for gBuffer FBO
-    glCreateTextures(GL_TEXTURE_2D, 1, &gPosition);
-    glTextureStorage2D(gPosition, 1, GL_RGBA32F, WIDTH, HEIGHT);
     glCreateTextures(GL_TEXTURE_2D, 1, &gAlbedoSpec);
     glTextureStorage2D(gAlbedoSpec, 1, GL_RGBA8, WIDTH, HEIGHT);
     glCreateTextures(GL_TEXTURE_2D, 1, &gNormal);
     glTextureStorage2D(gNormal, 1, GL_RG8_SNORM, WIDTH, HEIGHT);
-    //glTextureStorage2D(gNormal, 1, GL_RGBA8_SNORM, WIDTH, HEIGHT);
+    //glTextureStorage2D(gNormal, 1, GL_RGBA8_SNORM, WIDTH, HEIGHT); // debugging format
     glCreateTextures(GL_TEXTURE_2D, 1, &gShininess);
     glTextureStorage2D(gShininess, 1, GL_R16F, WIDTH, HEIGHT);
     glCreateTextures(GL_TEXTURE_2D, 1, &gDepth);
-    glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
-
+    glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32, WIDTH, HEIGHT);
+    
     // create gBuffer FBO
     glCreateFramebuffers(1, &gfbo);
-    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT0, gPosition, 0);
-    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT1, gAlbedoSpec, 0);
-    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT2, gNormal, 0);
-    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT3, gShininess, 0);
+    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT0, gAlbedoSpec, 0);
+    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT1, gNormal, 0);
+    glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT2, gShininess, 0);
     glNamedFramebufferTexture(gfbo, GL_DEPTH_ATTACHMENT, gDepth, 0);
     GLenum buffers[] = { GL_COLOR_ATTACHMENT0, 
       GL_COLOR_ATTACHMENT1, 
-      GL_COLOR_ATTACHMENT2, 
-      GL_COLOR_ATTACHMENT3 };
+      GL_COLOR_ATTACHMENT2 };
     glNamedFramebufferDrawBuffers(gfbo, _countof(buffers), buffers);
     if (GLenum status = glCheckNamedFramebufferStatus(gfbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
     {
@@ -250,7 +257,6 @@ private:
     glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, normal));
     glVertexArrayAttribFormat(vao, 2, 2, GL_FLOAT, GL_FALSE, offsetof(Vertex, uv));
     glVertexArrayAttribFormat(vao, 3, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, tangent));
-    glVertexArrayAttribFormat(vao, 4, 3, GL_FLOAT, GL_FALSE, offsetof(Vertex, bitangent));
     glVertexArrayAttribBinding(vao, 0, 0);
     glVertexArrayAttribBinding(vao, 1, 0);
     glVertexArrayAttribBinding(vao, 2, 0);
@@ -288,6 +294,11 @@ private:
       }));
     Shader::shaders["shadow"].emplace(Shader(
       { { "shadow.vs", GL_VERTEX_SHADER } }));
+    Shader::shaders["volumetric"].emplace(Shader(
+      {
+        { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+        { "volumetric.fs", GL_FRAGMENT_SHADER }
+      }));
 
     glClearColor(0, 0, 0, 0);
 
@@ -298,12 +309,12 @@ private:
     std::vector<PointLight> localLights;
     float sunPosition = 0;
     DirLight globalLight;
-    globalLight.ambient = glm::vec3(.0125f);
+    globalLight.ambient = glm::vec3(.0225f);
     globalLight.diffuse = glm::vec3(.5f);
     globalLight.direction = glm::normalize(glm::vec3(1, -.5, 0));
     globalLight.specular = glm::vec3(.125f);
 
-    int numLights = 5000;
+    int numLights = 1000;
     for (int x = 0; x < numLights; x++)
     {
       PointLight light;
@@ -365,9 +376,9 @@ private:
           sunPosition += dt;
         if (Input::IsKeyDown(GLFW_KEY_Q))
           sunPosition -= dt;
-        globalLight.direction.x = glm::cos(sunPosition);
+        globalLight.direction.x = .1f;
         globalLight.direction.y = glm::sin(sunPosition);
-        globalLight.direction.z = .1f;
+        globalLight.direction.z = glm::cos(sunPosition);
         globalLight.direction = glm::normalize(globalLight.direction);
       }
 
@@ -441,10 +452,10 @@ private:
 
       glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      glBindTextureUnit(0, gPosition);
-      glBindTextureUnit(1, gNormal);
-      glBindTextureUnit(2, gAlbedoSpec);
-      glBindTextureUnit(3, gShininess);
+      glBindTextureUnit(0, gNormal);
+      glBindTextureUnit(1, gAlbedoSpec);
+      glBindTextureUnit(2, gShininess);
+      glBindTextureUnit(3, gDepth);
       glBindTextureUnit(4, shadowDepth);
 
       // global light pass (and apply shadow)
@@ -452,12 +463,14 @@ private:
         glDisable(GL_DEPTH_TEST);
         auto& gPhongGlobal = Shader::shaders["gPhongGlobal"];
         gPhongGlobal->Bind();
-        gPhongGlobal->SetInt("gPosition", 0);
-        gPhongGlobal->SetInt("gNormal", 1);
-        gPhongGlobal->SetInt("gAlbedoSpec", 2);
-        gPhongGlobal->SetInt("gShininess", 3);
+        gPhongGlobal->SetInt("gNormal", 0);
+        gPhongGlobal->SetInt("gAlbedoSpec", 1);
+        gPhongGlobal->SetInt("gShininess", 2);
+        gPhongGlobal->SetInt("gDepth", 3);
         gPhongGlobal->SetInt("shadowDepth", 4);
         gPhongGlobal->SetVec3("u_viewPos", cam.GetPos());
+        gPhongGlobal->SetMat4("u_invProj", glm::inverse(cam.GetProj()));
+        gPhongGlobal->SetMat4("u_invView", glm::inverse(cam.GetView()));
         gPhongGlobal->SetVec3("u_globalLight.ambient", globalLight.ambient);
         gPhongGlobal->SetVec3("u_globalLight.diffuse", globalLight.diffuse);
         gPhongGlobal->SetVec3("u_globalLight.specular", globalLight.specular);
@@ -481,40 +494,57 @@ private:
         gPhongLocal->SetMat4("u_viewProj", cam.GetViewProj());
         gPhongLocal->SetMat4("u_invProj", glm::inverse(cam.GetProj()));
         gPhongLocal->SetMat4("u_invView", glm::inverse(cam.GetView()));
-        gPhongLocal->SetInt("gPosition", 0);
-        gPhongLocal->SetInt("gNormal", 1);
-        gPhongLocal->SetInt("gAlbedoSpec", 2);
-        gPhongLocal->SetInt("gShininess", 3);
         gPhongLocal->SetVec3("u_viewPos", cam.GetPos());
+        gPhongLocal->SetInt("gNormal", 0);
+        gPhongLocal->SetInt("gAlbedoSpec", 1);
+        gPhongLocal->SetInt("gShininess", 2);
+        gPhongLocal->SetInt("gDepth", 3);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, lightSSBO);
         glVertexArrayVertexBuffer(vao, 0, sphere.GetID(), 0, sizeof(Vertex));
         glDrawArraysInstanced(GL_TRIANGLES, 0, sphere.GetVertexCount(), localLights.size());
       }
 
+      // volumetric/crepuscular/god rays pass
+      {
+        glBindFramebuffer(GL_FRAMEBUFFER, postprocessFbo);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+        glBindTextureUnit(0, hdrColor);
+        glBindTextureUnit(1, gDepth);
+        glBindTextureUnit(2, shadowDepth);
+        auto& volumetric = Shader::shaders["volumetric"];
+        volumetric->Bind();
+        volumetric->SetInt("u_hdrBuffer", 0);
+        volumetric->SetInt("gDepth", 1);
+        volumetric->SetInt("shadowDepth", 2);
+        volumetric->SetMat4("u_invView", glm::inverse(cam.GetView()));
+        volumetric->SetMat4("u_invProj", glm::inverse(cam.GetProj()));
+        volumetric->SetMat4("u_lightMatrix", lightMat);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+      }
+
+      // tone mapping + gamma correction pass
       applyTonemapping(dt);
 
       if (Input::IsKeyDown(GLFW_KEY_1))
       {
-        drawFSTexture(gPosition);
+        drawFSTexture(gAlbedoSpec);
       }
       if (Input::IsKeyDown(GLFW_KEY_2))
       {
-        drawFSTexture(gAlbedoSpec);
+        drawFSTexture(gNormal);
       }
       if (Input::IsKeyDown(GLFW_KEY_3))
       {
-        drawFSTexture(gNormal);
+        drawFSTexture(gDepth);
       }
       if (Input::IsKeyDown(GLFW_KEY_4))
       {
-        drawFSTexture(gDepth);
-      }
-      if (Input::IsKeyDown(GLFW_KEY_5))
-      {
         drawFSTexture(gShininess);
       }
-      if (Input::IsKeyDown(GLFW_KEY_6))
+      if (Input::IsKeyDown(GLFW_KEY_5))
       {
         drawFSTexture(shadowDepth);
       }
@@ -545,7 +575,7 @@ private:
     glEnable(GL_FRAMEBUFFER_SRGB);
     glDisable(GL_BLEND);
 
-    glBindTextureUnit(1, hdrColor);
+    glBindTextureUnit(1, postprocessColor);
 
     const float logLowLum = glm::log(targetLuminance / maxExposure);
     const float logMaxLum = glm::log(targetLuminance / minExposure);
@@ -591,15 +621,11 @@ private:
     glViewport(0, 0, WIDTH, HEIGHT);
     auto& shdr = Shader::shaders["tonemap"];
     glDepthMask(GL_FALSE);
-    glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     shdr->Bind();
     shdr->SetFloat("u_exposureFactor", exposureFactor);
     shdr->SetInt("u_hdrBuffer", 1);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glDepthMask(GL_TRUE);
 
     glDisable(GL_FRAMEBUFFER_SRGB);
   }
@@ -616,8 +642,9 @@ private:
   const uint32_t HEIGHT = 810;
 
   // deferred stuff
-  GLuint gfbo{}, gPosition{}, gAlbedoSpec{}, gNormal{}, gDepth{}, gShininess{};
+  GLuint gfbo{}, gAlbedoSpec{}, gNormal{}, gDepth{}, gShininess{};
   GLuint shadowFbo{}, shadowDepth{};
+  GLuint postprocessFbo{}, postprocessColor{};
   GLuint SHADOW_WIDTH = 2048;
   GLuint SHADOW_HEIGHT = 2048;
 

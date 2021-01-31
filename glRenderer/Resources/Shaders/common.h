@@ -1,3 +1,6 @@
+#ifndef COMMON_H
+#define COMMON_H
+
 // Returns ±1
 vec2 signNotZero(vec2 v)
 {
@@ -19,3 +22,21 @@ vec3 oct_to_float32x3(vec2 e)
   if (v.z < 0) v.xy = (1.0 - abs(v.yx)) * signNotZero(v.xy);
   return normalize(v);
 }
+
+vec3 WorldPosFromDepth(float depth, vec2 texSize, mat4 invProj, mat4 invView)
+{
+  float z = depth * 2.0 - 1.0; // [0, 1] -> [-1, 1]
+  vec2 normalized = gl_FragCoord.xy / texSize; // [0.5, u_viewPortSize] -> [0, 1]
+  vec4 clipSpacePosition = vec4(normalized * 2.0 - 1.0, z, 1.0); // [0, 1] -> [-1, 1]
+  vec4 viewSpacePosition = invProj * clipSpacePosition; // undo projection
+
+  // perspective division
+  viewSpacePosition /= viewSpacePosition.w;
+
+  // undo view
+  vec4 worldSpacePosition = invView * viewSpacePosition;
+
+  return worldSpacePosition.xyz;
+}
+
+#endif

@@ -23,21 +23,19 @@ layout (std430, binding = 0) readonly buffer lit
 layout (location = 0) in vec3 vLightPos;
 layout (location = 1) in flat int vInstanceID;
 
-layout (location = 2) uniform vec3 u_viewPos;
-layout (location = 4) uniform sampler2D gPosition;
-layout (location = 5) uniform sampler2D gNormal;
-layout (location = 6) uniform sampler2D gAlbedoSpec;
-layout (location = 9) uniform sampler2D gShininess;
+layout (location = 2) uniform sampler2D gNormal;
+layout (location = 3) uniform sampler2D gAlbedoSpec;
+layout (location = 4) uniform sampler2D gShininess;
+layout (location = 5) uniform sampler2D gDepth;
+layout (location = 6) uniform vec3 u_viewPos;
 layout (location = 7) uniform mat4 u_invProj;
 layout (location = 8) uniform mat4 u_invView;
-//layout (location = 9) uniform PointSpotLight u_light;
 
 layout (location = 0) out vec4 fragColor;
 
 vec3 CalcLocalColor(PointLight light);
 float CalcAttenuation(PointLight light);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 viewDir);
-vec3 WorldPosFromDepth(float depth);
 
 vec3 albedo;
 float specular;
@@ -45,10 +43,12 @@ vec3 vPos;
 float shininess;
 void main()
 {
-  vec2 texCoord = gl_FragCoord.xy / textureSize(gPosition, 0).xy;
+  vec2 texSize = textureSize(gNormal, 0);
+  vec2 texCoord = gl_FragCoord.xy / texSize;
   albedo = texture(gAlbedoSpec, texCoord).rgb;
   specular = texture(gAlbedoSpec, texCoord).a;
-  vPos = texture(gPosition, texCoord).xyz;
+  //vPos = texture(gPosition, texCoord).xyz;
+  vPos = WorldPosFromDepth(texture(gDepth, texCoord).r, texSize, u_invProj, u_invView);
   shininess = texture(gShininess, texCoord).r;
   vec3 vNormal = oct_to_float32x3(texture(gNormal, texCoord).xy);
   //vec3 vNormal = texture(gNormal, texCoord).xyz;
@@ -60,7 +60,7 @@ void main()
     return;
   }
 
-  vec3 pixelPos = WorldPosFromDepth(0.0);
+  vec3 pixelPos = WorldPosFromDepth(0.0, texSize, u_invProj, u_invView);
   float pixelDistanceToLightSquared = dot(pixelPos - lights[vInstanceID].position.xyz, pixelPos - lights[vInstanceID].position.xyz);
   if ((gl_FrontFacing == true && pixelDistanceToLightSquared < lights[vInstanceID].radiusSquared) || 
     gl_FrontFacing == false && pixelDistanceToLightSquared >= lights[vInstanceID].radiusSquared)
@@ -103,20 +103,4 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 viewDir)
   vec3 local = CalcLocalColor(light, lightDir, normal, viewDir);
   local *= CalcAttenuation(light);
   return local;
-}
-
-vec3 WorldPosFromDepth(float depth)
-{
-  float z = depth * 2.0 - 1.0; // [0, 1] -> [1, 1]
-  vec2 normalized = gl_FragCoord.xy / textureSize(gPosition, 0); // [0.5, u_viewPortSize] -> [0, 1]
-  vec4 clipSpacePosition = vec4(normalized * 2.0 - 1.0, z, 1.0); // [0, 1] -> [-1, 1]
-  vec4 viewSpacePosition = u_invProj * clipSpacePosition; // undo projection
-
-  // perspective division
-  viewSpacePosition /= viewSpacePosition.w;
-
-  // undo view
-  vec4 worldSpacePosition = u_invView * viewSpacePosition;
-
-  return worldSpacePosition.xyz;
 }

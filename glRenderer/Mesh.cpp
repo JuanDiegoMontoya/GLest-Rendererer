@@ -43,10 +43,10 @@ std::vector<Mesh> LoadObj(std::string path)
     exit(1);
   }
 
-  if (!reader.Warning().empty())
-  {
-    std::cout << "TinyObjReader: " << reader.Warning();
-  }
+  //if (!reader.Warning().empty())
+  //{
+  //  std::cout << "TinyObjReader: " << reader.Warning();
+  //}
 
   auto& attrib = reader.GetAttrib();
   auto& shapes = reader.GetShapes();
@@ -91,6 +91,10 @@ std::vector<Mesh> LoadObj(std::string path)
         
         vertices.push_back({ {vx, vy, vz}, { nx, ny, nz }, {tx, ty} });
       }
+      index_offset += fv;
+
+      // calculate triangle tangents and bitangents
+      // makes the BIG assumption that all faces have exactly three (3) vertices
       glm::vec3 pos1 = vertices[vertices.size() - 3].position;
       glm::vec3 pos2 = vertices[vertices.size() - 2].position;
       glm::vec3 pos3 = vertices[vertices.size() - 1].position;
@@ -106,21 +110,16 @@ std::vector<Mesh> LoadObj(std::string path)
       tangent.x = ff * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
       tangent.y = ff * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
       tangent.z = ff * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
-      bitangent.x = ff * (-deltaUV2.y * edge1.x + deltaUV1.y * edge2.x);
-      bitangent.y = ff * (-deltaUV2.y * edge1.y + deltaUV1.y * edge2.y);
-      bitangent.z = ff * (-deltaUV2.y * edge1.z + deltaUV1.y * edge2.z);
+      //bitangent.x = ff * (-deltaUV2.y * edge1.x + deltaUV1.y * edge2.x);
+      //bitangent.y = ff * (-deltaUV2.y * edge1.y + deltaUV1.y * edge2.y);
+      //bitangent.z = ff * (-deltaUV2.y * edge1.z + deltaUV1.y * edge2.z);
       vertices[vertices.size() - 3].tangent = tangent;
       vertices[vertices.size() - 2].tangent = tangent;
       vertices[vertices.size() - 1].tangent = tangent;
-      vertices[vertices.size() - 3].bitangent = bitangent;
-      vertices[vertices.size() - 2].bitangent = bitangent;
-      vertices[vertices.size() - 1].bitangent = bitangent;
-      index_offset += fv;
+      //vertices[vertices.size() - 3].bitangent = bitangent;
+      //vertices[vertices.size() - 2].bitangent = bitangent;
+      //vertices[vertices.size() - 1].bitangent = bitangent;
 
-      // per-face material
-      shapes[s].mesh.material_ids[f];
-
-      // assume all faces in shape have same material
       std::string name;
       std::string diffuseName;
       std::string maskName;
@@ -137,11 +136,16 @@ std::vector<Mesh> LoadObj(std::string path)
         shininess = materials[shapes[s].mesh.material_ids[f]].shininess;
       }
 
+      // push material and cut shape if material changes partway through
       if (prevName != name || f == shapes[s].mesh.num_face_vertices.size() - 1)
       {
         if (f == shapes[s].mesh.num_face_vertices.size() - 1)
         {
           prevName = name;
+        }
+        else
+        {
+          //printf("Shape split!\n");
         }
         Material material{};
         if (auto findResult = materialMap.find(prevName); findResult != materialMap.end())

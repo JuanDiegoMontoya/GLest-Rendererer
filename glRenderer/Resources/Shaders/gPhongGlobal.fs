@@ -14,14 +14,16 @@ struct DirLight
 
 layout (location = 0) in vec2 vTexCoord;
 
-layout (location = 0) uniform vec3 u_viewPos;
-layout (location = 1) uniform sampler2D gPosition;
-layout (location = 2) uniform sampler2D gNormal;
-layout (location = 3) uniform sampler2D gAlbedoSpec;
-layout (location = 4) uniform sampler2D gShininess;
-layout (location = 5) uniform sampler2D shadowDepth;
+layout (location = 0) uniform sampler2D gNormal;
+layout (location = 1) uniform sampler2D gAlbedoSpec;
+layout (location = 2) uniform sampler2D gShininess;
+layout (location = 3) uniform sampler2D gDepth;
+layout (location = 4) uniform sampler2D shadowDepth;
+layout (location = 5) uniform vec3 u_viewPos;
 layout (location = 6) uniform mat4 u_lightMatrix;
-layout (location = 7) uniform DirLight u_globalLight;
+layout (location = 7) uniform mat4 u_invProj;
+layout (location = 8) uniform mat4 u_invView;
+layout (location = 9) uniform DirLight u_globalLight;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -43,9 +45,10 @@ float Shadow(vec4 lightSpacePos, vec3 normal, vec3 lightDir)
 
 void main()
 {
+  vec2 texSize = textureSize(gNormal, 0);
   vec3 albedo = texture(gAlbedoSpec, vTexCoord).rgb;
   float specular = texture(gAlbedoSpec, vTexCoord).a;
-  vec3 vPos = texture(gPosition, vTexCoord).xyz;
+  vec3 vPos = WorldPosFromDepth(texture(gDepth, vTexCoord).r, texSize, u_invProj, u_invView);
   vec3 vNormal = oct_to_float32x3(texture(gNormal, vTexCoord).xy);
   //vec3 vNormal = texture(gNormal, vTexCoord).xyz;
   float shininess = texture(gShininess, vTexCoord).r;
@@ -68,7 +71,7 @@ void main()
   vec3 ambient = u_globalLight.ambient * albedo;
   vec3 diffuse = u_globalLight.diffuse * diff * albedo;
   vec3 specu = u_globalLight.specular * spec * specular;
-  
+
   float shadow = Shadow(lightSpacePos, vNormal, lightDir);
   fragColor = vec4((ambient + (1.0 - shadow) * (diffuse + specu)), 1.0);
   //fragColor = fragColor * .0001 + vec4(shadow); // view shadow
