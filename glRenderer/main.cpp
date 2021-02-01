@@ -469,8 +469,7 @@ private:
         gPhongGlobal->SetInt("gDepth", 3);
         gPhongGlobal->SetInt("shadowDepth", 4);
         gPhongGlobal->SetVec3("u_viewPos", cam.GetPos());
-        gPhongGlobal->SetMat4("u_invProj", glm::inverse(cam.GetProj()));
-        gPhongGlobal->SetMat4("u_invView", glm::inverse(cam.GetView()));
+        gPhongGlobal->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
         gPhongGlobal->SetVec3("u_globalLight.ambient", globalLight.ambient);
         gPhongGlobal->SetVec3("u_globalLight.diffuse", globalLight.diffuse);
         gPhongGlobal->SetVec3("u_globalLight.specular", globalLight.specular);
@@ -492,8 +491,7 @@ private:
         auto& gPhongLocal = Shader::shaders["gPhongManyLocal"];
         gPhongLocal->Bind();
         gPhongLocal->SetMat4("u_viewProj", cam.GetViewProj());
-        gPhongLocal->SetMat4("u_invProj", glm::inverse(cam.GetProj()));
-        gPhongLocal->SetMat4("u_invView", glm::inverse(cam.GetView()));
+        gPhongLocal->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
         gPhongLocal->SetVec3("u_viewPos", cam.GetPos());
         gPhongLocal->SetInt("gNormal", 0);
         gPhongLocal->SetInt("gAlbedoSpec", 1);
@@ -519,8 +517,7 @@ private:
         volumetric->SetInt("u_hdrBuffer", 0);
         volumetric->SetInt("gDepth", 1);
         volumetric->SetInt("shadowDepth", 2);
-        volumetric->SetMat4("u_invView", glm::inverse(cam.GetView()));
-        volumetric->SetMat4("u_invProj", glm::inverse(cam.GetProj()));
+        volumetric->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
         volumetric->SetMat4("u_lightMatrix", lightMat);
         glDrawArrays(GL_TRIANGLES, 0, 3);
       }

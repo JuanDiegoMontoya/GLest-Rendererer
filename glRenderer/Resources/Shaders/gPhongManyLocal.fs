@@ -28,8 +28,7 @@ layout (location = 3) uniform sampler2D gAlbedoSpec;
 layout (location = 4) uniform sampler2D gShininess;
 layout (location = 5) uniform sampler2D gDepth;
 layout (location = 6) uniform vec3 u_viewPos;
-layout (location = 7) uniform mat4 u_invProj;
-layout (location = 8) uniform mat4 u_invView;
+layout (location = 7) uniform mat4 u_invViewProj;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -48,7 +47,7 @@ void main()
   albedo = texture(gAlbedoSpec, texCoord).rgb;
   specular = texture(gAlbedoSpec, texCoord).a;
   //vPos = texture(gPosition, texCoord).xyz;
-  vPos = WorldPosFromDepth(texture(gDepth, texCoord).r, texSize, u_invProj, u_invView);
+  vPos = WorldPosFromDepth(texture(gDepth, texCoord).r, texSize, u_invViewProj);
   shininess = texture(gShininess, texCoord).r;
   vec3 vNormal = oct_to_float32x3(texture(gNormal, texCoord).xy);
   //vec3 vNormal = texture(gNormal, texCoord).xyz;
@@ -60,7 +59,7 @@ void main()
     return;
   }
 
-  vec3 pixelPos = WorldPosFromDepth(0.0, texSize, u_invProj, u_invView);
+  vec3 pixelPos = WorldPosFromDepth(0.0, texSize, u_invViewProj);
   float pixelDistanceToLightSquared = dot(pixelPos - lights[vInstanceID].position.xyz, pixelPos - lights[vInstanceID].position.xyz);
   if ((gl_FrontFacing == true && pixelDistanceToLightSquared < lights[vInstanceID].radiusSquared) || 
     gl_FrontFacing == false && pixelDistanceToLightSquared >= lights[vInstanceID].radiusSquared)
