@@ -15,6 +15,8 @@
 #include "Object.h"
 #include "Light.h"
 
+#define MULTISAMPLE_TRICK 0
+
 class Timer
 {
 public:
@@ -136,6 +138,7 @@ private:
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    //glfwWindowHint(GLFW_SAMPLES, NUM_MULTISAMPLES);
     glfwSwapInterval(1);
 
     window = glfwCreateWindow(WIDTH, HEIGHT, "OpenGL", nullptr, nullptr);
@@ -156,6 +159,7 @@ private:
     glDebugMessageCallback(GLerrorCB, nullptr);
 
     glViewport(0, 0, WIDTH, HEIGHT);
+    glEnable(GL_MULTISAMPLE); // for shadows
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
@@ -201,12 +205,42 @@ private:
     glCreateBuffers(1, &histogramBuffer);
     glNamedBufferStorage(histogramBuffer, NUM_BUCKETS * sizeof(int), zeros.data(), 0);
 
+    const GLfloat txzeros[] = { 0, 0, 0, 0 };
+#if MULTISAMPLE_TRICK
     // create shadow map depth texture and fbo
+    glCreateTextures(GL_TEXTURE_2D_MULTISAMPLE, 1, &shadowMoments);
+    glTextureStorage2DMultisample(shadowMoments, NUM_MULTISAMPLES, GL_RG32F, SHADOW_WIDTH, SHADOW_HEIGHT, true);
+    glCreateTextures(GL_TEXTURE_2D_MULTISAMPLE, 1, &shadowDepth);
+    glTextureStorage2DMultisample(shadowDepth, NUM_MULTISAMPLES, GL_DEPTH_COMPONENT32, SHADOW_WIDTH, SHADOW_HEIGHT, true);
+    glCreateFramebuffers(1, &shadowFbo);
+    glNamedFramebufferTexture(shadowFbo, GL_COLOR_ATTACHMENT0, shadowMoments, 0);
+    glNamedFramebufferTexture(shadowFbo, GL_DEPTH_ATTACHMENT, shadowDepth, 0);
+    glNamedFramebufferDrawBuffer(shadowFbo, GL_COLOR_ATTACHMENT0);
+    if (GLenum status = glCheckNamedFramebufferStatus(shadowFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+    {
+      throw std::runtime_error("Failed to create shadow framebuffer");
+    }
+
+    // create shadow blit target fbo + texture
+    glCreateTextures(GL_TEXTURE_2D, 1, &shadowMomentsTarget);
+    glTextureStorage2D(shadowMomentsTarget, 1, GL_RG32F, SHADOW_WIDTH, SHADOW_HEIGHT);
+    glTextureParameterfv(shadowMomentsTarget, GL_TEXTURE_BORDER_COLOR, txzeros);
+    glTextureParameteri(shadowMomentsTarget, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(shadowMomentsTarget, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(shadowMomentsTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(shadowMomentsTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glCreateFramebuffers(1, &shadowTargetFbo);
+    glNamedFramebufferTexture(shadowTargetFbo, GL_COLOR_ATTACHMENT0, shadowMomentsTarget, 0);
+    glNamedFramebufferDrawBuffer(shadowTargetFbo, GL_COLOR_ATTACHMENT0);
+    if (GLenum status = glCheckNamedFramebufferStatus(shadowTargetFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+    {
+      throw std::runtime_error("Failed to create shadow framebuffer");
+    }
+#else // non-multisample FBO, use gaussian blur
     glCreateTextures(GL_TEXTURE_2D, 1, &shadowMoments);
     glTextureStorage2D(shadowMoments, 1, GL_RG32F, SHADOW_WIDTH, SHADOW_HEIGHT);
     glCreateTextures(GL_TEXTURE_2D, 1, &shadowDepth);
-    glTextureStorage2D(shadowDepth, 5, GL_DEPTH_COMPONENT32, SHADOW_WIDTH, SHADOW_HEIGHT);
-    const GLfloat txzeros[] = { 0, 0, 0, 0 };
+    glTextureStorage2D(shadowDepth, 1, GL_DEPTH_COMPONENT32, SHADOW_WIDTH, SHADOW_HEIGHT);
     glTextureParameterfv(shadowMoments, GL_TEXTURE_BORDER_COLOR, txzeros);
     glTextureParameteri(shadowMoments, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTextureParameteri(shadowMoments, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
@@ -220,6 +254,8 @@ private:
     {
       throw std::runtime_error("Failed to create shadow framebuffer");
     }
+    shadowMomentsTarget = shadowMoments;
+#endif
 
     // create texture for blurring shadow moments
     glCreateTextures(GL_TEXTURE_2D, 1, &shadowMomentBlur);
@@ -293,8 +329,18 @@ private:
       { { "generate_histogram.cs", GL_COMPUTE_SHADER } }));
     Shader::shaders["calc_exposure"].emplace(Shader(
       { { "calc_exposure.cs", GL_COMPUTE_SHADER } }));
-    Shader::shaders["gaussian"].emplace(Shader(
-      { { "gaussian.cs", GL_COMPUTE_SHADER } }));
+    Shader::shaders["gaussian_blur6"].emplace(Shader(
+      { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 6"}}} }));
+    Shader::shaders["gaussian_blur5"].emplace(Shader(
+      { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 5"}}} }));
+    Shader::shaders["gaussian_blur4"].emplace(Shader(
+      { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 4"}}} }));
+    Shader::shaders["gaussian_blur3"].emplace(Shader(
+      { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 3"}}} }));
+    Shader::shaders["gaussian_blur2"].emplace(Shader(
+      { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 2"}}} }));
+    Shader::shaders["gaussian_blur1"].emplace(Shader(
+      { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 1"}}} }));
     Shader::shaders["tonemap"].emplace(Shader(
       {
         { "fullscreen_tri.vs", GL_VERTEX_SHADER },
@@ -461,7 +507,11 @@ private:
         }
       }
 
-      blurTexture(shadowMoments, shadowMomentBlur, SHADOW_WIDTH, SHADOW_HEIGHT, 1);
+#if MULTISAMPLE_TRICK
+      glBlitNamedFramebuffer(shadowFbo, shadowTargetFbo, 0, 0, SHADOW_WIDTH, SHADOW_HEIGHT, 0, 0, SHADOW_WIDTH, SHADOW_HEIGHT, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+#else
+      blurTexture(shadowMoments, shadowMomentBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
+#endif
 
       glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -469,7 +519,7 @@ private:
       glBindTextureUnit(1, gAlbedoSpec);
       glBindTextureUnit(2, gShininess);
       glBindTextureUnit(3, gDepth);
-      glBindTextureUnit(4, shadowMoments);
+      glBindTextureUnit(4, shadowMomentsTarget);
 
       // global light pass (and apply shadow)
       {
@@ -524,7 +574,7 @@ private:
         glDepthMask(GL_FALSE);
         glBindTextureUnit(0, hdrColor);
         glBindTextureUnit(1, gDepth);
-        glBindTextureUnit(2, shadowMoments);
+        glBindTextureUnit(2, shadowMomentsTarget);
         auto& volumetric = Shader::shaders["volumetric"];
         volumetric->Bind();
         volumetric->SetInt("u_hdrBuffer", 0);
@@ -558,6 +608,10 @@ private:
       {
         drawFSTexture(shadowMoments);
       }
+      if (Input::IsKeyDown(GLFW_KEY_6))
+      {
+        drawFSTexture(shadowMomentsTarget);
+      }
       if (Input::IsKeyPressed(GLFW_KEY_C))
       {
         Shader::shaders.erase("gPhongGlobal");
@@ -576,9 +630,20 @@ private:
     }
   }
 
-  void blurTexture(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes)
+  void blurTexture(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
   {
-    auto& shader = Shader::shaders["gaussian"];
+    auto& shader = [strength]() -> auto&
+    {
+      switch (strength)
+      {
+      case 6: return Shader::shaders["gaussian_blur6"];
+      case 5: return Shader::shaders["gaussian_blur5"];
+      case 4: return Shader::shaders["gaussian_blur4"];
+      case 3: return Shader::shaders["gaussian_blur3"];
+      case 2: return Shader::shaders["gaussian_blur2"];
+      default: return Shader::shaders["gaussian_blur1"];
+      }
+    }();
     shader->Bind();
     shader->SetIVec2("u_texSize", width, height);
     shader->SetInt("u_inTex", 0);
@@ -688,11 +753,20 @@ private:
 
   // deferred stuff
   GLuint gfbo{}, gAlbedoSpec{}, gNormal{}, gDepth{}, gShininess{};
+  GLuint postprocessFbo{}, postprocessColor{};
+
+  // shadow stuff
   GLuint shadowFbo{}, shadowMoments{}, shadowDepth{};
   GLuint shadowMomentBlur{};
-  GLuint postprocessFbo{}, postprocessColor{};
+  GLuint shadowTargetFbo{}, shadowMomentsTarget{};
   GLuint SHADOW_WIDTH = 1024;
   GLuint SHADOW_HEIGHT = 1024;
+#if MULTISAMPLE_TRICK
+  const int NUM_MULTISAMPLES = 4;
+#else
+  const int BLUR_PASSES = 1;
+  const int BLUR_STRENGTH = 3;
+#endif
 
   // HDR stuff
   GLuint hdrfbo{}, hdrColor{}, hdrDepth{};
@@ -724,9 +798,11 @@ int main()
 
 // TODO list
 // skybox
-// VSM
 // image-based lighting
 // imgui
 // tiled/clustered shading
 // efficient draw call submission/multi draw
 // PBR
+
+// DONE
+// VSM

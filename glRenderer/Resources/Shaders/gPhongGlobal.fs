@@ -34,7 +34,7 @@ vec3 ShadowTexCoord(vec4 lightSpacePos)
   return projCoords.xyz;
 }
 
-const float u_minVariance = .00001; // for numeric precision
+const float u_minVariance = .000001; // for numeric precision
 float linstep(float min, float max, float v)
 {
   return clamp((v - min) / (max - min), 0.0, 1.0);
@@ -52,7 +52,7 @@ float Chebyshev(vec2 moments, float t)
   float variance = moments.y - (moments.x * moments.x);
   variance = max(variance, u_minVariance);
   float d = moments.x - t;
-  float p_max = ReduceLightBleeding(variance / (variance + d * d), .9);
+  float p_max = ReduceLightBleeding(variance / (variance + d * d), .8);
   return max(p, p_max);
 }
 
