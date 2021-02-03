@@ -202,22 +202,28 @@ private:
     glNamedBufferStorage(histogramBuffer, NUM_BUCKETS * sizeof(int), zeros.data(), 0);
 
     // create shadow map depth texture and fbo
+    glCreateTextures(GL_TEXTURE_2D, 1, &shadowMoments);
+    glTextureStorage2D(shadowMoments, 1, GL_RG32F, SHADOW_WIDTH, SHADOW_HEIGHT);
     glCreateTextures(GL_TEXTURE_2D, 1, &shadowDepth);
-    glTextureStorage2D(shadowDepth, 1, GL_DEPTH_COMPONENT32F, SHADOW_WIDTH, SHADOW_HEIGHT);
+    glTextureStorage2D(shadowDepth, 5, GL_DEPTH_COMPONENT32, SHADOW_WIDTH, SHADOW_HEIGHT);
     const GLfloat txzeros[] = { 0, 0, 0, 0 };
-    glTextureParameterfv(shadowDepth, GL_TEXTURE_BORDER_COLOR, txzeros);
-    glTextureParameteri(shadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTextureParameteri(shadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTextureParameterfv(shadowMoments, GL_TEXTURE_BORDER_COLOR, txzeros);
+    glTextureParameteri(shadowMoments, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(shadowMoments, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(shadowMoments, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(shadowMoments, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glCreateFramebuffers(1, &shadowFbo);
+    glNamedFramebufferTexture(shadowFbo, GL_COLOR_ATTACHMENT0, shadowMoments, 0);
     glNamedFramebufferTexture(shadowFbo, GL_DEPTH_ATTACHMENT, shadowDepth, 0);
-    glNamedFramebufferDrawBuffer(shadowFbo, GL_NONE);
-    glNamedFramebufferReadBuffer(shadowFbo, GL_NONE);
-    //GLenum shadowFboBuffers[] = { GL_NONE };
-    //glNamedFramebufferDrawBuffers(shadowFbo, _countof(shadowFboBuffers), shadowFboBuffers);
+    glNamedFramebufferDrawBuffer(shadowFbo, GL_COLOR_ATTACHMENT0);
     if (GLenum status = glCheckNamedFramebufferStatus(shadowFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
     {
       throw std::runtime_error("Failed to create shadow framebuffer");
     }
+
+    // create texture for blurring shadow moments
+    glCreateTextures(GL_TEXTURE_2D, 1, &shadowMomentBlur);
+    glTextureStorage2D(shadowMomentBlur, 1, GL_RG32F, SHADOW_WIDTH, SHADOW_HEIGHT);
 
     // create texture attachments for gBuffer FBO
     glCreateTextures(GL_TEXTURE_2D, 1, &gAlbedoSpec);
@@ -287,13 +293,17 @@ private:
       { { "generate_histogram.cs", GL_COMPUTE_SHADER } }));
     Shader::shaders["calc_exposure"].emplace(Shader(
       { { "calc_exposure.cs", GL_COMPUTE_SHADER } }));
+    Shader::shaders["gaussian"].emplace(Shader(
+      { { "gaussian.cs", GL_COMPUTE_SHADER } }));
     Shader::shaders["tonemap"].emplace(Shader(
       {
         { "fullscreen_tri.vs", GL_VERTEX_SHADER },
         { "tonemap.fs", GL_FRAGMENT_SHADER }
       }));
     Shader::shaders["shadow"].emplace(Shader(
-      { { "shadow.vs", GL_VERTEX_SHADER } }));
+      { { "shadow.vs", GL_VERTEX_SHADER },
+        { "vsm.fs", GL_FRAGMENT_SHADER } 
+      }));
     Shader::shaders["volumetric"].emplace(Shader(
       {
         { "fullscreen_tri.vs", GL_VERTEX_SHADER },
@@ -393,14 +403,15 @@ private:
       glFrontFace(GL_CCW);
       glCullFace(GL_BACK);
 
+      const glm::vec3 sunPos = -glm::normalize(globalLight.direction) * 200.f + glm::vec3(0, 30, 0);
       const glm::mat4& lightMat = MakeLightMatrix(
-        globalLight, -glm::normalize(globalLight.direction) * 200.f + glm::vec3(0, 30, 0), glm::vec2(120), glm::vec2(1.0f, 350.0f));
+        globalLight, sunPos, glm::vec2(120), glm::vec2(1.0f, 350.0f));
 
       // create shadow map pass
       {
         glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo);
-        glClear(GL_DEPTH_BUFFER_BIT);
+        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
         //const glm::mat4& lightMat = MakeLightMatrix(
         //  globalLight, -globalLight.direction * 5.f, glm::vec2(10), glm::vec2(1.0f, 10.0f));
         auto& shadowShader = Shader::shaders["shadow"];
@@ -429,7 +440,7 @@ private:
         gBufferShader->SetInt("u_object.alpha", 1);
         gBufferShader->SetInt("u_object.specular", 2);
         gBufferShader->SetInt("u_object.normal", 3);
-
+        
         for (const auto& obj : objects)
         {
           gBufferShader->SetMat4("u_model", obj.GetModelMatrix());
@@ -450,13 +461,15 @@ private:
         }
       }
 
+      blurTexture(shadowMoments, shadowMomentBlur, SHADOW_WIDTH, SHADOW_HEIGHT, 1);
+
       glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       glBindTextureUnit(0, gNormal);
       glBindTextureUnit(1, gAlbedoSpec);
       glBindTextureUnit(2, gShininess);
       glBindTextureUnit(3, gDepth);
-      glBindTextureUnit(4, shadowDepth);
+      glBindTextureUnit(4, shadowMoments);
 
       // global light pass (and apply shadow)
       {
@@ -511,7 +524,7 @@ private:
         glDepthMask(GL_FALSE);
         glBindTextureUnit(0, hdrColor);
         glBindTextureUnit(1, gDepth);
-        glBindTextureUnit(2, shadowDepth);
+        glBindTextureUnit(2, shadowMoments);
         auto& volumetric = Shader::shaders["volumetric"];
         volumetric->Bind();
         volumetric->SetInt("u_hdrBuffer", 0);
@@ -543,7 +556,16 @@ private:
       }
       if (Input::IsKeyDown(GLFW_KEY_5))
       {
-        drawFSTexture(shadowDepth);
+        drawFSTexture(shadowMoments);
+      }
+      if (Input::IsKeyPressed(GLFW_KEY_C))
+      {
+        Shader::shaders.erase("gPhongGlobal");
+        Shader::shaders["gPhongGlobal"].emplace(Shader(
+          {
+            { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+            { "gPhongGlobal.fs", GL_FRAGMENT_SHADER }
+          }));
       }
 
       if (Input::IsKeyDown(GLFW_KEY_ESCAPE))
@@ -551,6 +573,32 @@ private:
         glfwSetWindowShouldClose(window, true);
       }
       glfwSwapBuffers(window);
+    }
+  }
+
+  void blurTexture(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes)
+  {
+    auto& shader = Shader::shaders["gaussian"];
+    shader->Bind();
+    shader->SetIVec2("u_texSize", width, height);
+    shader->SetInt("u_inTex", 0);
+    shader->SetInt("u_outTex", 0);
+
+    const int X_SIZE = 32;
+    const int Y_SIZE = 32;
+    const int xgroups = (width + X_SIZE - 1) / X_SIZE;
+    const int ygroups = (height + Y_SIZE - 1) / Y_SIZE;
+
+    bool horizontal = false;
+    for (int i = 0; i < passes * 2; i++)
+    {
+      glBindTextureUnit(0, inOutTex);
+      glBindImageTexture(0, intermediateTexture, 0, false, 0, GL_WRITE_ONLY, GL_RG32F);
+      shader->SetBool("u_horizontal", horizontal);
+      glDispatchCompute(xgroups, ygroups, 1);
+      glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+      std::swap(inOutTex, intermediateTexture);
+      horizontal = !horizontal;
     }
   }
 
@@ -640,10 +688,11 @@ private:
 
   // deferred stuff
   GLuint gfbo{}, gAlbedoSpec{}, gNormal{}, gDepth{}, gShininess{};
-  GLuint shadowFbo{}, shadowDepth{};
+  GLuint shadowFbo{}, shadowMoments{}, shadowDepth{};
+  GLuint shadowMomentBlur{};
   GLuint postprocessFbo{}, postprocessColor{};
-  GLuint SHADOW_WIDTH = 2048;
-  GLuint SHADOW_HEIGHT = 2048;
+  GLuint SHADOW_WIDTH = 1024;
+  GLuint SHADOW_HEIGHT = 1024;
 
   // HDR stuff
   GLuint hdrfbo{}, hdrColor{}, hdrDepth{};
@@ -672,3 +721,12 @@ int main()
 
   return EXIT_SUCCESS;
 }
+
+// TODO list
+// skybox
+// VSM
+// image-based lighting
+// imgui
+// tiled/clustered shading
+// efficient draw call submission/multi draw
+// PBR

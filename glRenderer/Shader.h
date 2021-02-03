@@ -108,6 +108,16 @@ public:
     assert(Uniforms.find(uniform) != Uniforms.end());
     glProgramUniform2f(programID, Uniforms[uniform], x, y);
   }
+  void SetIVec2(std::string uniform, const glm::ivec2& value)
+  {
+    assert(Uniforms.find(uniform) != Uniforms.end());
+    glProgramUniform2iv(programID, Uniforms[uniform], 1, glm::value_ptr(value));
+  }
+  void SetIVec2(std::string uniform, int x, int y)
+  {
+    assert(Uniforms.find(uniform) != Uniforms.end());
+    glProgramUniform2i(programID, Uniforms[uniform], x, y);
+  }
   void SetVec3(std::string uniform, const glm::vec3& value)
   {
     assert(Uniforms.find(uniform) != Uniforms.end());

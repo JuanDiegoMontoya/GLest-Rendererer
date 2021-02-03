@@ -24,7 +24,7 @@ float Shadow(vec4 lightSpacePos)
   return shadow;
 }
 
-const int NUM_STEPS = 100;
+const int NUM_STEPS = 50;
 const float intensity = .02;
 const float distToFull = 20.0;
 
@@ -34,7 +34,7 @@ void main()
   const vec3 rayEnd = WorldPosFromDepth(texture(gDepth, vTexCoord).r, textureSize(gDepth, 0), u_invViewProj);
   const vec3 rayStart = WorldPosFromDepth(0, textureSize(gDepth, 0), u_invViewProj);
   const vec3 rayDir = normalize(rayEnd - rayStart);
-  const float rayStep = length(rayEnd - rayStart) / NUM_STEPS;
+  const float rayStep = distance(rayEnd, rayStart) / NUM_STEPS;
   vec3 rayPos = rayStart;
 
   float accum = 0.0;
@@ -45,7 +45,7 @@ void main()
     rayPos += rayDir * rayStep;
   }
 
-  fragColor = vec4((length(rayEnd - rayStart) / distToFull) * intensity * (accum / NUM_STEPS) + texture(u_hdrBuffer, vTexCoord).rgb, 1.0);
+  fragColor = vec4((distance(rayEnd, rayStart) / distToFull) * intensity * (accum / NUM_STEPS) + texture(u_hdrBuffer, vTexCoord).rgb, 1.0);
 }
 #else
 void main()
