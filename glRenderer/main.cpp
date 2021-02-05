@@ -195,6 +195,8 @@ private:
     glTextureStorage2D(volumetricsTex, 1, GL_R16F, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
     GLint swizzleMask[] = { GL_RED, GL_RED, GL_RED, GL_ONE };
     glTextureParameteriv(volumetricsTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+    glTextureParameteri(volumetricsTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(volumetricsTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glCreateFramebuffers(1, &volumetricsFbo);
     glNamedFramebufferTexture(volumetricsFbo, GL_COLOR_ATTACHMENT0, volumetricsTex, 0);
     glNamedFramebufferDrawBuffer(volumetricsFbo, GL_COLOR_ATTACHMENT0);
@@ -205,6 +207,19 @@ private:
     glCreateTextures(GL_TEXTURE_2D, 1, &volumetricsTexBlur);
     glTextureStorage2D(volumetricsTexBlur, 1, GL_R16F, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
     glTextureParameteriv(volumetricsTexBlur, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+
+    // create a-trous fbo and texture
+    glCreateTextures(GL_TEXTURE_2D, 1, &atrousTex);
+    glTextureStorage2D(atrousTex, 1, GL_R16F, WIDTH, HEIGHT);
+    glTextureParameteriv(atrousTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+    glCreateFramebuffers(1, &atrousFbo);
+    glNamedFramebufferTexture(atrousFbo, GL_COLOR_ATTACHMENT0, atrousTex, 0);
+    glNamedFramebufferTexture(atrousFbo, GL_COLOR_ATTACHMENT1, volumetricsTex, 0);
+    glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT0);
+    if (GLenum status = glCheckNamedFramebufferStatus(atrousFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+    {
+      throw std::runtime_error("Failed to create a-trous framebuffer");
+    }
 
     // create tone mapping buffers
     std::vector<int> zeros(NUM_BUCKETS, 0);
@@ -405,6 +420,11 @@ private:
       {
         { "fullscreen_tri.vs", GL_VERTEX_SHADER },
         { "vsm_copy.fs", GL_FRAGMENT_SHADER }
+      }));
+    Shader::shaders["atrous"].emplace(Shader(
+      {
+        { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+        { "atrous.fs", GL_FRAGMENT_SHADER }
       }));
 
     glClearColor(0, 0, 0, 0);
@@ -631,6 +651,7 @@ private:
       {
         glViewport(0, 0, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, volumetricsFbo);
+        glClear(GL_COLOR_BUFFER_BIT);
         glDisable(GL_BLEND);
         glDisable(GL_DEPTH_TEST);
         glDepthFunc(GL_ALWAYS);
@@ -651,7 +672,28 @@ private:
 
       if (!Input::IsKeyDown(GLFW_KEY_B))
       {
-        blurTexture16rf(volumetricsTex, volumetricsTexBlur, WIDTH, HEIGHT, VOLUMETRIC_BLUR_PASSES, VOLUMETRIC_BLUR_STRENGTH);
+        //blurTexture16rf(volumetricsTex, volumetricsTexBlur, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT, VOLUMETRIC_BLUR_PASSES, VOLUMETRIC_BLUR_STRENGTH);
+        glViewport(0, 0, WIDTH, HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, atrousFbo);
+        auto& atrousFilter = Shader::shaders["atrous"];
+        atrousFilter->Bind();
+        atrousFilter->SetInt("gColor", 0);
+        atrousFilter->SetInt("gDepth", 1);
+        atrousFilter->SetInt("gNormal", 2);
+        atrousFilter->SetFloat("c_phi", c_phi);
+        atrousFilter->SetFloat("n_phi", n_phi);
+        atrousFilter->SetFloat("p_phi", p_phi);
+        atrousFilter->SetFloat("stepwidth", stepWidth);
+        atrousFilter->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
+        atrousFilter->SetIVec2("u_resolution", VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
+        atrousFilter->Set1FloatArray("kernel[0]", atrouskernel);
+        atrousFilter->Set2FloatArray("offsets[0]", atrouskerneloffsets);
+        glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT0);
+        glBindTextureUnit(0, volumetricsTex);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT1);
+        glBindTextureUnit(0, atrousTex);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
       }
       
       // composite blur with final pre-postprocessed image
@@ -664,7 +706,8 @@ private:
         glBlendFunc(GL_ONE, GL_ONE);
         glBlendEquation(GL_FUNC_ADD);
         glDepthMask(GL_FALSE);
-        glBindTextureUnit(0, volumetricsTex);
+        glBindTextureUnit(0, volumetricsTex); // uncomment for 0 or 2 pass a-trous
+        //glBindTextureUnit(0, atrousTex); // uncomment for 1 pass a-trous
         auto& fsshader = Shader::shaders["fstexture"];
         fsshader->Bind();
         fsshader->SetInt("u_texture", 0);
@@ -699,6 +742,10 @@ private:
       if (Input::IsKeyDown(GLFW_KEY_6))
       {
         drawFSTexture(volumetricsTex);
+      }
+      if (Input::IsKeyDown(GLFW_KEY_7))
+      {
+        drawFSTexture(atrousTex);
       }
       if (Input::IsKeyPressed(GLFW_KEY_C))
       {
@@ -889,9 +936,28 @@ private:
   std::unique_ptr<Texture2D> bluenoiseTex{};
   GLuint volumetricsFbo{}, volumetricsTex{}, volumetricsTexBlur{};
   const int VOLUMETRIC_BLUR_PASSES = 1;
-  const int VOLUMETRIC_BLUR_STRENGTH = 1;
+  const int VOLUMETRIC_BLUR_STRENGTH = 3;
   const uint32_t VOLUMETRIC_WIDTH = WIDTH / 1;
   const uint32_t VOLUMETRIC_HEIGHT = HEIGHT / 1;
+  
+  // a-trous filter stuff
+  GLuint atrousFbo{}, atrousTex{};
+  float c_phi = 1.0f;
+  float n_phi = 1.0f;
+  float p_phi = 1.0f;
+  float stepWidth = 1.0f;
+  const float atrouskernel[25] = {
+    0.015026f, 0.028569f, 0.035391f, 0.028569f, 0.015026f,
+    0.028569f, 0.054318f, 0.067288f, 0.054318f, 0.028569f,
+    0.035391f, 0.067288f, 0.083355f, 0.067288f, 0.035391f,
+    0.028569f, 0.054318f, 0.067288f, 0.054318f, 0.028569f,
+    0.015026f, 0.028569f, 0.035391f, 0.028569f, 0.015026f };
+  const glm::vec2 atrouskerneloffsets[25] = {
+    { -2, 2 }, { -1, 2 }, { 0, 2 }, { 1, 2 }, { 2, 2 },
+    { -2, 1 }, { -1, 1 }, { 0, 1 }, { 1, 1 }, { 2, 1 },
+    { -2, 0 }, { -1, 0 }, { 0, 0 }, { 1, 0 }, { 2, 0 },
+    { -2, -1 }, { -1, -1 }, { 0, -1 }, { 1, -1 }, { 2, -1 },
+    { -2, -2 }, { -1, -2 }, { 0, -2 }, { 1, -2 }, { 2, -2 } };
 
   // deferred stuff
   GLuint gfbo{}, gAlbedoSpec{}, gNormal{}, gDepth{}, gShininess{};
@@ -938,7 +1004,7 @@ int main()
   return EXIT_SUCCESS;
 }
 
-// TODO list
+// TODO list (unordered)
 // skybox
 // image-based lighting
 // imgui

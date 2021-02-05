@@ -152,7 +152,6 @@ public:
   // list of all shader programs
   static inline std::unordered_map<std::string, std::optional<Shader>> shaders;
 private:
-
   std::unordered_map<std::string, GLint> Uniforms;
   GLuint programID{ 0 };
 

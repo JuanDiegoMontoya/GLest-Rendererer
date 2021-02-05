@@ -25,18 +25,20 @@ float Shadow(vec4 lightSpacePos)
   return shadow;
 }
 
+const int INV_FREQ = 1;
 const int NUM_STEPS = 50;
-const float intensity = .12;
+const float intensity = .02 * INV_FREQ * INV_FREQ;
 const float distToFull = 20.0;
 
 void main()
 {
+  if (mod(ivec2(gl_FragCoord.xy), ivec2(INV_FREQ)) != ivec2(0))
+    discard;
   const vec3 rayEnd = WorldPosFromDepth(texture(gDepth, vTexCoord).r, u_screenSize, u_invViewProj);
   const vec3 rayStart = WorldPosFromDepth(0, u_screenSize, u_invViewProj);
   const vec3 rayDir = normalize(rayEnd - rayStart);
   const float rayStep = distance(rayEnd, rayStart) / NUM_STEPS;
-  vec3 rayPos = rayStart + rayStep * texelFetch(u_blueNoise, ivec2(mod(ivec2(gl_FragCoord.xy), textureSize(u_blueNoise, 0))), 0).x / 2.0;
-
+  vec3 rayPos = rayStart + rayStep * texelFetch(u_blueNoise, ivec2(mod(ivec2(gl_FragCoord.xy) / INV_FREQ, textureSize(u_blueNoise, 0))), 0).x / 1.0;
   
   float accum = 0.0;
   for (int i = 0; i < NUM_STEPS; i++)

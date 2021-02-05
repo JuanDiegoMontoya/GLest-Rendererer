@@ -40,7 +40,6 @@ private:
   std::string* source_name{};
 };
 
-
 Shader::Shader(std::vector<ShaderInfo> shaders)
 {
   const std::unordered_map<GLenum, shaderc_shader_kind> gl2shadercTypes =
@@ -134,7 +133,6 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
     glDetachShader(programID, shaderID);
 }
 
-
 // loads a shader source into a string (string_view doesn't support concatenation)
 std::string Shader::loadFile(std::string path)
 {
@@ -153,7 +151,6 @@ std::string Shader::loadFile(std::string path)
   }
   return content;
 }
-
 
 // compiles a shader source and returns its ID
 GLint Shader::compileShader(shaderType type, const std::vector<std::string>& src, std::string_view path)
@@ -190,37 +187,32 @@ GLint Shader::compileShader(shaderType type, const std::vector<std::string>& src
   return shader;
 }
 
-
-// TODO: https://github.com/fendevel/Guide-to-Modern-OpenGL-Functions#ideal-way-of-retrieving-all-uniform-names
 void Shader::initUniforms()
 {
-  // init uniform map used in that shader
-  GLint max_length;
-  GLint num_uniforms;
+  GLint uniform_count = 0;
+  glGetProgramiv(programID, GL_ACTIVE_UNIFORMS, &uniform_count);
 
-  glGetProgramiv(programID, GL_ACTIVE_UNIFORM_MAX_LENGTH, &max_length);
-  GLchar* pname = new GLchar[max_length];
-  glGetProgramiv(programID, GL_ACTIVE_UNIFORMS, &num_uniforms);
-
-  for (GLint i = 0; i < num_uniforms; ++i)
+  if (uniform_count != 0)
   {
-    GLsizei written;
-    GLint size;
-    GLenum type;
-    
-    glGetActiveUniform(programID, i, max_length, &written, &size, &type, pname);
-    GLchar* pname1 = new GLchar[max_length];
-    std::memcpy(pname1, pname, max_length * sizeof(GLchar));
-    if (size > 1)
-      pname1[written - 3] = '\0';
-    GLint loc = glGetUniformLocation(programID, pname1);
-    Uniforms.emplace(pname1, loc);
-    //delete[] pname1;
+    GLint 	max_name_len = 0;
+    GLsizei length = 0;
+    GLsizei count = 0;
+    GLenum 	type = GL_NONE;
+    glGetProgramiv(programID, GL_ACTIVE_UNIFORM_MAX_LENGTH, &max_name_len);
+
+    auto uniform_name = std::make_unique<char[]>(max_name_len);
+
+    for (GLint i = 0; i < uniform_count; ++i)
+    {
+      glGetActiveUniform(programID, i, max_name_len, &length, &count, &type, uniform_name.get());
+
+      GLuint uniform_info = {};
+      uniform_info = glGetUniformLocation(programID, uniform_name.get());
+
+      Uniforms.emplace(std::string(uniform_name.get(), length), uniform_info);
+    }
   }
-
-  delete[] pname;
 }
-
 
 void Shader::checkLinkStatus(std::vector<std::string_view> files)
 {
@@ -231,20 +223,17 @@ void Shader::checkLinkStatus(std::vector<std::string_view> files)
   if (!success)
   {
     glGetProgramInfoLog(programID, 512, NULL, infoLog);
-    std::cout << "File(s): ";// << vertexPath << ", " << fragmentPath << '\n';
+    std::cout << "File(s): ";
     for (const auto& file : files)
       std::cout << file << (file == *(files.end() - 1) ? "" : ", "); // no comma on last element
     std::cout << '\n';
     std::cout << "Failed to link shader program\n" << infoLog << std::endl;
-    //traceMessage(std::string(infoLog));
   }
   else
   {
     // link successful
   }
 }
-
-
 
 std::vector<uint32_t>
   Shader::spvPreprocessAndCompile(
@@ -254,7 +243,6 @@ std::vector<uint32_t>
     std::string path,
     shaderc_shader_kind shaderType)
 {
-  // vert/frag required
   std::string rawSrc = loadFile(path);
   for (const auto& [search, replacement] : replace)
   {
