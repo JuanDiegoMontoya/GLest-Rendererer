@@ -3,11 +3,12 @@
 
 layout (location = 0) in vec2 vTexCoord;
 
-layout (location = 0) uniform sampler2D u_hdrBuffer;
 layout (location = 1) uniform sampler2D gDepth;
 layout (location = 2) uniform sampler2D shadowDepth;
 layout (location = 3) uniform mat4 u_invViewProj;
 layout (location = 4) uniform mat4 u_lightMatrix;
+layout (location = 5) uniform sampler2D u_blueNoise;
+layout (location = 6) uniform ivec2 u_screenSize;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -25,18 +26,18 @@ float Shadow(vec4 lightSpacePos)
 }
 
 const int NUM_STEPS = 50;
-const float intensity = .02;
+const float intensity = .12;
 const float distToFull = 20.0;
 
-#if 1
 void main()
 {
-  const vec3 rayEnd = WorldPosFromDepth(texture(gDepth, vTexCoord).r, textureSize(gDepth, 0), u_invViewProj);
-  const vec3 rayStart = WorldPosFromDepth(0, textureSize(gDepth, 0), u_invViewProj);
+  const vec3 rayEnd = WorldPosFromDepth(texture(gDepth, vTexCoord).r, u_screenSize, u_invViewProj);
+  const vec3 rayStart = WorldPosFromDepth(0, u_screenSize, u_invViewProj);
   const vec3 rayDir = normalize(rayEnd - rayStart);
   const float rayStep = distance(rayEnd, rayStart) / NUM_STEPS;
-  vec3 rayPos = rayStart;
+  vec3 rayPos = rayStart + rayStep * texelFetch(u_blueNoise, ivec2(mod(ivec2(gl_FragCoord.xy), textureSize(u_blueNoise, 0))), 0).x / 2.0;
 
+  
   float accum = 0.0;
   for (int i = 0; i < NUM_STEPS; i++)
   {
@@ -45,13 +46,5 @@ void main()
     rayPos += rayDir * rayStep;
   }
 
-  fragColor = vec4((distance(rayEnd, rayStart) / distToFull) * intensity * (accum / NUM_STEPS) + texture(u_hdrBuffer, vTexCoord).rgb, 1.0);
+  fragColor = vec4(vec3((distance(rayEnd, rayStart) / distToFull) * intensity * (accum / NUM_STEPS)), 1.0);
 }
-#else
-void main()
-{
-  float rayEnd = texture(gDepth, vTexCoord).r;
-  float rayPos = 0.0;
-
-}
-#endif

@@ -49,5 +49,5 @@ void main()
     }
   }
 
-  imageStore(u_outTex, texel, color);
+  imageStore(u_outTex, texel, vec4(color));
 }

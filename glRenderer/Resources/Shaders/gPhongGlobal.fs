@@ -18,11 +18,11 @@ layout (location = 0) uniform sampler2D gNormal;
 layout (location = 1) uniform sampler2D gAlbedoSpec;
 layout (location = 2) uniform sampler2D gShininess;
 layout (location = 3) uniform sampler2D gDepth;
-layout (location = 4) uniform sampler2D shadowDepth;
-layout (location = 5) uniform vec3 u_viewPos;
-layout (location = 6) uniform mat4 u_lightMatrix;
-layout (location = 7) uniform mat4 u_invViewProj;
-layout (location = 8) uniform DirLight u_globalLight;
+layout (location = 4) uniform sampler2D shadowMoments;
+layout (location = 6) uniform vec3 u_viewPos;
+layout (location = 7) uniform mat4 u_lightMatrix;
+layout (location = 8) uniform mat4 u_invViewProj;
+layout (location = 9) uniform DirLight u_globalLight;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -52,14 +52,14 @@ float Chebyshev(vec2 moments, float t)
   float variance = moments.y - (moments.x * moments.x);
   variance = max(variance, u_minVariance);
   float d = moments.x - t;
-  float p_max = ReduceLightBleeding(variance / (variance + d * d), .8);
+  float p_max = ReduceLightBleeding(variance / (variance + d * d), .9);
   return max(p, p_max);
 }
 
 float Shadow(vec4 lightSpacePos)
 {
   vec3 LightTexCoord = ShadowTexCoord(lightSpacePos);
-  vec2 moments = texture(shadowDepth, LightTexCoord.xy).xy;
+  vec2 moments = texture(shadowMoments, LightTexCoord.xy).xy;
   return 1.0 - Chebyshev(moments, LightTexCoord.z);
 }
 

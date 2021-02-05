@@ -110,9 +110,13 @@ std::vector<Mesh> LoadObj(std::string path)
       tangent.x = ff * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
       tangent.y = ff * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
       tangent.z = ff * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
-      //bitangent.x = ff * (-deltaUV2.y * edge1.x + deltaUV1.y * edge2.x);
-      //bitangent.y = ff * (-deltaUV2.y * edge1.y + deltaUV1.y * edge2.y);
-      //bitangent.z = ff * (-deltaUV2.y * edge1.z + deltaUV1.y * edge2.z);
+      bitangent.x = ff * (-deltaUV2.y * edge1.x + deltaUV1.y * edge2.x);
+      bitangent.y = ff * (-deltaUV2.y * edge1.y + deltaUV1.y * edge2.y);
+      bitangent.z = ff * (-deltaUV2.y * edge1.z + deltaUV1.y * edge2.z);
+      if (glm::dot(vertices[vertices.size() - 1].normal, glm::cross(tangent, bitangent)) < 0)
+      {
+        tangent = -tangent;
+      }
       vertices[vertices.size() - 3].tangent = tangent;
       vertices[vertices.size() - 2].tangent = tangent;
       vertices[vertices.size() - 1].tangent = tangent;
