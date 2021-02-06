@@ -2,7 +2,8 @@
 #include <vector>
 #include <string>
 #include <glm/glm.hpp>
-#include "Texture.h"
+
+class Texture2D;
 
 struct Vertex
 {
@@ -28,12 +29,18 @@ struct Material
 class Mesh
 {
 public:
+  Mesh() {}
   Mesh(const std::vector<Vertex>& vertices, Material mat);
   ~Mesh();
   Mesh(Mesh&& other) noexcept : material(other.material)
   {
     this->id = std::exchange(other.id, 0);
     this->vertexCount = std::exchange(other.vertexCount, 0);
+  }
+  Mesh& operator=(Mesh&& other) noexcept
+  {
+    if (&other == this) return *this;
+    new(this) Mesh(std::move(other));
   }
   unsigned GetID() const { return id; }
   unsigned GetVertexCount() const { return vertexCount; }
@@ -43,7 +50,7 @@ private:
   //std::vector<Vertex> vertices;
   unsigned id{};
   unsigned vertexCount{};
-  Material material;
+  Material material{};
 };
 
 std::vector<Mesh> LoadObj(std::string path);
