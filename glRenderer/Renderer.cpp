@@ -303,16 +303,16 @@ void Renderer::MainLoop()
       //blurTexture16rf(volumetricsTex, volumetricsTexBlur, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT, VOLUMETRIC_BLUR_PASSES, VOLUMETRIC_BLUR_STRENGTH);
       glViewport(0, 0, WIDTH, HEIGHT);
       glBindFramebuffer(GL_FRAMEBUFFER, atrousFbo);
-      auto& atrousFilter = Shader::shaders["atrous"];
+      auto& atrousFilter = Shader::shaders["atrous_volumetric"];
       atrousFilter->Bind();
       atrousFilter->SetInt("gColor", 0);
-      atrousFilter->SetInt("gDepth", 1);
-      atrousFilter->SetInt("gNormal", 2);
+      //atrousFilter->SetInt("gDepth", 1);
+      //atrousFilter->SetInt("gNormal", 2);
       atrousFilter->SetFloat("c_phi", c_phi);
-      atrousFilter->SetFloat("n_phi", n_phi);
-      atrousFilter->SetFloat("p_phi", p_phi);
+      //atrousFilter->SetFloat("n_phi", n_phi);
+      //atrousFilter->SetFloat("p_phi", p_phi);
       atrousFilter->SetFloat("stepwidth", stepWidth);
-      atrousFilter->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
+      //atrousFilter->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
       atrousFilter->SetIVec2("u_resolution", VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
       atrousFilter->Set1FloatArray("kernel[0]", atrouskernel);
       atrousFilter->Set2FloatArray("offsets[0]", atrouskerneloffsets);
@@ -432,6 +432,8 @@ void Renderer::CreateFramebuffers()
   glTextureParameteriv(volumetricsTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
   glTextureParameteri(volumetricsTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTextureParameteri(volumetricsTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTextureParameteri(volumetricsTex, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+  glTextureParameteri(volumetricsTex, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
   glCreateFramebuffers(1, &volumetricsFbo);
   glNamedFramebufferTexture(volumetricsFbo, GL_COLOR_ATTACHMENT0, volumetricsTex, 0);
   glNamedFramebufferDrawBuffer(volumetricsFbo, GL_COLOR_ATTACHMENT0);
@@ -447,6 +449,8 @@ void Renderer::CreateFramebuffers()
   glCreateTextures(GL_TEXTURE_2D, 1, &atrousTex);
   glTextureStorage2D(atrousTex, 1, GL_R16F, WIDTH, HEIGHT);
   glTextureParameteriv(atrousTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+  glTextureParameteri(atrousTex, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+  glTextureParameteri(atrousTex, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
   glCreateFramebuffers(1, &atrousFbo);
   glNamedFramebufferTexture(atrousFbo, GL_COLOR_ATTACHMENT0, atrousTex, 0);
   glNamedFramebufferTexture(atrousFbo, GL_COLOR_ATTACHMENT1, volumetricsTex, 0);
@@ -654,9 +658,9 @@ void Renderer::DrawUI()
     ImGui::Text((const char*)(u8"À-Trous"));
     ImGui::Separator();
     ImGui::Checkbox("Enabled", &volumetric_atrousEnabled);
-    ImGui::SliderFloat("c_phi", &c_phi, .001f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("c_phi", &c_phi, .0001f, 10.0f, "%.4f", 4.0f);
+    //ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
+    //ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Step width", &stepWidth, 0.5f, 2.0f, "%.3f");
     ImGui::End();
   }
@@ -684,16 +688,26 @@ void Renderer::DrawUI()
   {
     ImGui::Begin("Postprocessing");
     ImGui::SliderFloat("Luminance", &targetLuminance, 0.01f, 1.0f);
-    ImGui::SliderFloat("Exposure factor", &exposureFactor, 0.0f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Exposure factor", &exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Adjustment speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Min exposure", &minExposure, 0.0f, 100.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Max exposure", &maxExposure, 0.0f, 100.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Min exposure", &minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Max exposure", &maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
     ImGui::End();
   }
 
   {
     ImGui::Begin("View Buffer");
-    ImGui::Image((void*)gNormal, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
+    ImGui::Image((void*)uiViewBuffer, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
+    ImGui::RadioButton("gAlbedoSpec", &uiViewBuffer, gAlbedoSpec);
+    ImGui::RadioButton("gNormal", &uiViewBuffer, gNormal);
+    ImGui::RadioButton("gDepth", &uiViewBuffer, gDepth);
+    ImGui::RadioButton("gShininess", &uiViewBuffer, gShininess);
+    ImGui::RadioButton("hdrColor", &uiViewBuffer, hdrColor);
+    ImGui::RadioButton("hdrDepth", &uiViewBuffer, hdrDepth);
+    ImGui::RadioButton("shadowDepthGoodFormat", &uiViewBuffer, shadowDepthGoodFormat);
+    ImGui::RadioButton("atrousTex", &uiViewBuffer, atrousTex);
+    ImGui::RadioButton("volumetricsTex", &uiViewBuffer, volumetricsTex);
+    ImGui::RadioButton("postprocessColor", &uiViewBuffer, postprocessColor);
     ImGui::End();
   }
 }

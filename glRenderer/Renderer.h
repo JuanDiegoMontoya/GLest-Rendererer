@@ -72,7 +72,7 @@ private:
   // a-trous filter stuff
   GLuint atrousFbo{}, atrousTex{};
   bool volumetric_atrousEnabled = true;
-  float c_phi = 1.0f;
+  float c_phi = 0.0001f;
   float n_phi = 1.0f;
   float p_phi = 1.0f;
   float stepWidth = 1.0f;
@@ -116,4 +116,6 @@ private:
   float exposureFactor = 1.0f;
   float adjustmentSpeed = 2.0f;
   const int NUM_BUCKETS = 128;
+
+  GLint uiViewBuffer{};
 };
