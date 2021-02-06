@@ -22,7 +22,8 @@ layout (location = 4) uniform sampler2D shadowMoments;
 layout (location = 6) uniform vec3 u_viewPos;
 layout (location = 7) uniform mat4 u_lightMatrix;
 layout (location = 8) uniform mat4 u_invViewProj;
-layout (location = 9) uniform DirLight u_globalLight;
+layout (location = 9) uniform float u_lightBleedFix = .9;
+layout (location = 10) uniform DirLight u_globalLight;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -52,7 +53,7 @@ float Chebyshev(vec2 moments, float t)
   float variance = moments.y - (moments.x * moments.x);
   variance = max(variance, u_minVariance);
   float d = moments.x - t;
-  float p_max = ReduceLightBleeding(variance / (variance + d * d), .9);
+  float p_max = ReduceLightBleeding(variance / (variance + d * d), u_lightBleedFix);
   return max(p, p_max);
 }
 

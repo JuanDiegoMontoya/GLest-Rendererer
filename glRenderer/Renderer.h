@@ -36,6 +36,8 @@ private:
 
   void Cleanup();
 
+  void DrawUI();
+
   void ApplyTonemapping(float dt);
 
   // common
@@ -43,6 +45,7 @@ private:
   const uint32_t WIDTH = 1440;
   const uint32_t HEIGHT = 810;
   GLuint vao{};
+  bool cursorVisible = false;
 
   // scene info
   Camera cam;
@@ -57,13 +60,18 @@ private:
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex{};
   GLuint volumetricsFbo{}, volumetricsTex{}, volumetricsTexBlur{};
-  const int VOLUMETRIC_BLUR_PASSES = 1;
-  const int VOLUMETRIC_BLUR_STRENGTH = 3;
+  int VOLUMETRIC_BLUR_PASSES = 1;
+  int VOLUMETRIC_BLUR_STRENGTH = 3;
   const uint32_t VOLUMETRIC_WIDTH = WIDTH / 1;
   const uint32_t VOLUMETRIC_HEIGHT = HEIGHT / 1;
+  GLint volumetric_steps = 50;
+  float volumetric_intensity = .02f;
+  float volumetric_distToFull = 20.0f;
+  float volumetric_noiseOffset = 1.0f;
 
   // a-trous filter stuff
   GLuint atrousFbo{}, atrousTex{};
+  bool volumetric_atrousEnabled = true;
   float c_phi = 1.0f;
   float n_phi = 1.0f;
   float p_phi = 1.0f;
@@ -91,11 +99,12 @@ private:
   GLuint shadowTargetFbo{}, shadowDepthTarget{}, shadowDepthSquaredTarget{};
   GLuint SHADOW_WIDTH = 1024;
   GLuint SHADOW_HEIGHT = 1024;
+  float lightBleedFix = .9f;
 #if MULTISAMPLE_TRICK
   const int NUM_MULTISAMPLES = 4;
 #else
-  const int BLUR_PASSES = 1;
-  const int BLUR_STRENGTH = 3;
+  int BLUR_PASSES = 1;
+  int BLUR_STRENGTH = 3;
 #endif
 
   // HDR stuff

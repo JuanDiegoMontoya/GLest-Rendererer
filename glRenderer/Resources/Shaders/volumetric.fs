@@ -9,6 +9,10 @@ layout (location = 3) uniform mat4 u_invViewProj;
 layout (location = 4) uniform mat4 u_lightMatrix;
 layout (location = 5) uniform sampler2D u_blueNoise;
 layout (location = 6) uniform ivec2 u_screenSize;
+layout (location = 8) uniform int NUM_STEPS = 50;
+layout (location = 9) uniform float intensity = .02;
+layout (location = 10) uniform float distToFull = 20.0;
+layout (location = 11) uniform float noiseOffset = 1.0;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -25,20 +29,15 @@ float Shadow(vec4 lightSpacePos)
   return shadow;
 }
 
-const int INV_FREQ = 1;
-const int NUM_STEPS = 50;
-const float intensity = .02 * INV_FREQ * INV_FREQ;
-const float distToFull = 20.0;
 
 void main()
 {
-  if (mod(ivec2(gl_FragCoord.xy), ivec2(INV_FREQ)) != ivec2(0))
-    discard;
   const vec3 rayEnd = WorldPosFromDepth(texture(gDepth, vTexCoord).r, u_screenSize, u_invViewProj);
   const vec3 rayStart = WorldPosFromDepth(0, u_screenSize, u_invViewProj);
   const vec3 rayDir = normalize(rayEnd - rayStart);
-  const float rayStep = distance(rayEnd, rayStart) / NUM_STEPS;
-  vec3 rayPos = rayStart + rayStep * texelFetch(u_blueNoise, ivec2(mod(ivec2(gl_FragCoord.xy) / INV_FREQ, textureSize(u_blueNoise, 0))), 0).x / 1.0;
+  const float totalDistance = distance(rayStart, rayEnd);
+  const float rayStep = totalDistance / NUM_STEPS;
+  vec3 rayPos = rayStart + rayStep * texelFetch(u_blueNoise, ivec2(mod(ivec2(gl_FragCoord.xy), textureSize(u_blueNoise, 0))), 0).x * noiseOffset;
   
   float accum = 0.0;
   for (int i = 0; i < NUM_STEPS; i++)
@@ -48,5 +47,5 @@ void main()
     rayPos += rayDir * rayStep;
   }
 
-  fragColor = vec4(vec3((distance(rayEnd, rayStart) / distToFull) * intensity * (accum / NUM_STEPS)), 1.0);
+  fragColor = vec4(vec3((totalDistance / distToFull) * intensity * (accum / NUM_STEPS)), 1.0);
 }

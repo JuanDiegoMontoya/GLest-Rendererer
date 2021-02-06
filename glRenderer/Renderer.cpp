@@ -37,6 +37,7 @@ void Renderer::InitWindow()
   window = glfwCreateWindow(WIDTH, HEIGHT, "OpenGL", nullptr, nullptr);
   glfwMakeContextCurrent(window);
   Input::Init(window);
+  Input::SetCursorVisible(cursorVisible);
 }
 
 void Renderer::InitGL()
@@ -107,10 +108,17 @@ void Renderer::MainLoop()
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-    ImGui::Begin("Hello");
-    ImGui::Text("test");
-    ImGui::End();
-    cam.Update(dt);
+
+    if (Input::IsKeyPressed(GLFW_KEY_GRAVE_ACCENT))
+    {
+      cursorVisible = !cursorVisible;
+      Input::SetCursorVisible(cursorVisible);
+    }
+
+    if (!cursorVisible)
+    {
+      cam.Update(dt);
+    }
 
     if (Input::IsKeyDown(GLFW_KEY_Q) || Input::IsKeyDown(GLFW_KEY_E))
     {
@@ -234,6 +242,7 @@ void Renderer::MainLoop()
       gPhongGlobal->SetVec3("u_globalLight.specular", globalLight.specular);
       gPhongGlobal->SetVec3("u_globalLight.direction", globalLight.direction);
       gPhongGlobal->SetMat4("u_lightMatrix", lightMat);
+      gPhongGlobal->SetFloat("u_lightBleedFix", lightBleedFix);
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
@@ -282,10 +291,14 @@ void Renderer::MainLoop()
       volumetric->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
       volumetric->SetMat4("u_lightMatrix", lightMat);
       volumetric->SetIVec2("u_screenSize", VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
+      volumetric->SetInt("NUM_STEPS", volumetric_steps);
+      volumetric->SetFloat("intensity", volumetric_intensity);
+      volumetric->SetFloat("distToFull", volumetric_distToFull);
+      volumetric->SetFloat("noiseOffset", volumetric_noiseOffset);
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
-    if (!Input::IsKeyDown(GLFW_KEY_B))
+    if (volumetric_atrousEnabled)
     {
       //blurTexture16rf(volumetricsTex, volumetricsTexBlur, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT, VOLUMETRIC_BLUR_PASSES, VOLUMETRIC_BLUR_STRENGTH);
       glViewport(0, 0, WIDTH, HEIGHT);
@@ -384,8 +397,13 @@ void Renderer::MainLoop()
       glfwSetWindowShouldClose(window, true);
     }
 
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    DrawUI();
+
+    if (cursorVisible)
+    {
+      ImGui::Render();
+      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
 
     glfwSwapBuffers(window);
   }
@@ -621,6 +639,63 @@ void Renderer::Cleanup()
 
   glfwDestroyWindow(window);
   glfwTerminate();
+}
+
+void Renderer::DrawUI()
+{
+  {
+    ImGui::Begin("Volumetrics");
+    ImGui::Text("Rays");
+    ImGui::Separator();
+    ImGui::SliderInt("Steps", &volumetric_steps, 1, 100);
+    ImGui::SliderFloat("Intensity", &volumetric_intensity, 0.0f, 1.0f, "%.3f", 3.0f);
+    ImGui::SliderFloat("Offset", &volumetric_noiseOffset, 0.0f, 1.0f);
+    
+    ImGui::Text((const char*)(u8"À-Trous"));
+    ImGui::Separator();
+    ImGui::Checkbox("Enabled", &volumetric_atrousEnabled);
+    ImGui::SliderFloat("c_phi", &c_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Step width", &stepWidth, 0.5f, 2.0f, "%.3f");
+    ImGui::End();
+  }
+
+  {
+    ImGui::Begin("VSM");
+    ImGui::SliderInt("Blur passes", &BLUR_PASSES, 0, 5);
+    ImGui::SliderInt("Blur width", &BLUR_STRENGTH, 0, 6);
+    ImGui::SliderFloat("Light bleed reduction", &lightBleedFix, 0.0f, 1.0f, "%.3f");
+    ImGui::End();
+  }
+
+  {
+    ImGui::Begin("Environment");
+    if (ImGui::SliderAngle("Sun angle", &sunPosition, 180, 360))
+    {
+      globalLight.direction.x = .1f;
+      globalLight.direction.y = glm::sin(sunPosition);
+      globalLight.direction.z = glm::cos(sunPosition);
+      globalLight.direction = glm::normalize(globalLight.direction);
+    }
+    ImGui::End();
+  }
+
+  {
+    ImGui::Begin("Postprocessing");
+    ImGui::SliderFloat("Luminance", &targetLuminance, 0.01f, 1.0f);
+    ImGui::SliderFloat("Exposure factor", &exposureFactor, 0.0f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Adjustment speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Min exposure", &minExposure, 0.0f, 100.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Max exposure", &maxExposure, 0.0f, 100.0f, "%.3f", 2.0f);
+    ImGui::End();
+  }
+
+  {
+    ImGui::Begin("View Buffer");
+    ImGui::Image((void*)gNormal, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
+    ImGui::End();
+  }
 }
 
 void Renderer::ApplyTonemapping(float dt)
