@@ -13,7 +13,9 @@
 #include <cstdlib>
 #include <algorithm>
 
-void Renderer::run()
+#define MULTISAMPLE_TRICK 0
+
+void Renderer::Run()
 {
   InitWindow();
   InitGL();
@@ -298,7 +300,7 @@ void Renderer::MainLoop()
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
-    if (volumetric_atrousEnabled)
+    if (atrousPasses > 0)
     {
       //blurTexture16rf(volumetricsTex, volumetricsTexBlur, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT, VOLUMETRIC_BLUR_PASSES, VOLUMETRIC_BLUR_STRENGTH);
       glViewport(0, 0, WIDTH, HEIGHT);
@@ -316,36 +318,77 @@ void Renderer::MainLoop()
       atrousFilter->SetIVec2("u_resolution", VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
       atrousFilter->Set1FloatArray("kernel[0]", atrouskernel);
       atrousFilter->Set2FloatArray("offsets[0]", atrouskerneloffsets);
+      
       glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT0);
       glBindTextureUnit(0, volumetricsTex);
       glDrawArrays(GL_TRIANGLES, 0, 3);
-      glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT1);
-      glBindTextureUnit(0, atrousTex);
+      if (atrousPasses == 2) // two passes (won't support more)
+      {
+        glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT1);
+        glBindTextureUnit(0, atrousTex);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+      }
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glDepthMask(GL_FALSE);
+
+    // screen-space reflections
+    {
+      glViewport(0, 0, SSR_WIDTH, SSR_HEIGHT);
+      glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo);
+      glClear(GL_COLOR_BUFFER_BIT);
+      auto& ssrShader = Shader::shaders["ssr"];
+      ssrShader->Bind();
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glBindTextureUnit(0, hdrColor);
+      glBindTextureUnit(1, gDepth);
+      glBindTextureUnit(2, gShininess);
+      glBindTextureUnit(3, gNormal);
+      glBindTextureUnit(4, bluenoiseTex->GetID());
+      ssrShader->SetInt("gColor", 0);
+      ssrShader->SetInt("gDepth", 1);
+      ssrShader->SetInt("gShininess", 2);
+      ssrShader->SetInt("gNormal", 3);
+      ssrShader->SetInt("u_blueNoise", 4);
+      ssrShader->SetMat4("u_proj", cam.GetProj());
+      ssrShader->SetMat4("u_view", cam.GetView());
+      ssrShader->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
+      ssrShader->SetFloat("rayStep", ssr_rayStep);
+      ssrShader->SetFloat("minRayStep", ssr_minRayStep);
+      ssrShader->SetFloat("thickness", ssr_thickness);
+      ssrShader->SetFloat("searchDist", ssr_searchDist);
+      ssrShader->SetInt("maxSteps", ssr_maxRaySteps);
+      ssrShader->SetInt("binarySearchSteps", ssr_binarySearchSteps);
+      ssrShader->SetIVec2("u_viewportSize", SSR_WIDTH, SSR_HEIGHT);
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
-    // composite blur with final pre-postprocessed image
+    // composite blurred volumetrics and SSR with unprocessed image
     {
       glViewport(0, 0, WIDTH, HEIGHT);
       glBindFramebuffer(GL_FRAMEBUFFER, postprocessFbo);
       glClear(GL_COLOR_BUFFER_BIT);
-      glDisable(GL_DEPTH_TEST);
-      glEnable(GL_BLEND);
       glBlendFunc(GL_ONE, GL_ONE);
-      glBlendEquation(GL_FUNC_ADD);
-      glDepthMask(GL_FALSE);
-      glBindTextureUnit(0, volumetricsTex); // uncomment for 0 or 2 pass a-trous
-      //glBindTextureUnit(0, atrousTex); // uncomment for 1 pass a-trous
       auto& fsshader = Shader::shaders["fstexture"];
       fsshader->Bind();
       fsshader->SetInt("u_texture", 0);
+      if (atrousPasses % 2 == 0)
+        glBindTextureUnit(0, volumetricsTex); // uncomment for 0 or 2 pass a-trous
+      else
+        glBindTextureUnit(0, atrousTex); // uncomment for 1 pass a-trous
       glDrawArrays(GL_TRIANGLES, 0, 3);
       glBindTextureUnit(0, hdrColor);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
+      glBindTextureUnit(0, ssrTex);
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
     // tone mapping + gamma correction pass
     ApplyTonemapping(dt);
+
 
     if (Input::IsKeyDown(GLFW_KEY_1))
     {
@@ -375,6 +418,10 @@ void Renderer::MainLoop()
     {
       drawFSTexture(atrousTex);
     }
+    if (Input::IsKeyDown(GLFW_KEY_8))
+    {
+      drawFSTexture(ssrTex);
+    }
     if (Input::IsKeyPressed(GLFW_KEY_C))
     {
       Shader::shaders.erase("gPhongGlobal");
@@ -383,12 +430,23 @@ void Renderer::MainLoop()
           { "fullscreen_tri.vs", GL_VERTEX_SHADER },
           { "gPhongGlobal.fs", GL_FRAGMENT_SHADER }
         }));
-
       Shader::shaders.erase("volumetric");
       Shader::shaders["volumetric"].emplace(Shader(
         {
           { "fullscreen_tri.vs", GL_VERTEX_SHADER },
           { "volumetric.fs", GL_FRAGMENT_SHADER }
+        }));
+      Shader::shaders.erase("ssr");
+      Shader::shaders["ssr"].emplace(Shader(
+        {
+          { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+          { "ssr.fs", GL_FRAGMENT_SHADER }
+        }));
+      Shader::shaders.erase("gBuffer");
+      Shader::shaders["gBuffer"].emplace(Shader(
+        {
+          { "gBuffer.vs", GL_VERTEX_SHADER },
+          { "gBuffer.fs", GL_FRAGMENT_SHADER }
         }));
     }
 
@@ -423,6 +481,21 @@ void Renderer::CreateFramebuffers()
   if (GLenum status = glCheckNamedFramebufferStatus(hdrfbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
   {
     throw std::runtime_error("Failed to create HDR framebuffer");
+  }
+
+  // create SSR framebuffer + textures
+  glCreateTextures(GL_TEXTURE_2D, 1, &ssrTex);
+  glTextureStorage2D(ssrTex, 1, GL_RGBA16F, SSR_WIDTH, SSR_HEIGHT);
+  glTextureParameteri(ssrTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTextureParameteri(ssrTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glCreateTextures(GL_TEXTURE_2D, 1, &ssrTexBlur);
+  glTextureStorage2D(ssrTexBlur, 1, GL_RGBA16F, SSR_WIDTH, SSR_HEIGHT);
+  glCreateFramebuffers(1, &ssrFbo);
+  glNamedFramebufferTexture(ssrFbo, GL_COLOR_ATTACHMENT0, ssrTex, 0);
+  glNamedFramebufferDrawBuffer(ssrFbo, GL_COLOR_ATTACHMENT0);
+  if (GLenum status = glCheckNamedFramebufferStatus(ssrFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+  {
+    throw std::runtime_error("Failed to create SSR framebuffer");
   }
 
   // create volumetrics texture + fbo + intermediate (for blurring)
@@ -657,7 +730,12 @@ void Renderer::DrawUI()
     
     ImGui::Text((const char*)(u8"À-Trous"));
     ImGui::Separator();
-    ImGui::Checkbox("Enabled", &volumetric_atrousEnabled);
+    ImGui::Text("Passes");
+    int passes = atrousPasses;
+    ImGui::RadioButton("Zero", &passes, 0);
+    ImGui::SameLine(); ImGui::RadioButton("One", &passes, 1);
+    ImGui::SameLine(); ImGui::RadioButton("Two", &passes, 2);
+    atrousPasses = passes;
     ImGui::SliderFloat("c_phi", &c_phi, .0001f, 10.0f, "%.4f", 4.0f);
     //ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
     //ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
@@ -682,6 +760,9 @@ void Renderer::DrawUI()
       globalLight.direction.z = glm::cos(sunPosition);
       globalLight.direction = glm::normalize(globalLight.direction);
     }
+    ImGui::ColorEdit3("Diffuse", &globalLight.diffuse[0]);
+    ImGui::ColorEdit3("Ambient", &globalLight.ambient[0]);
+    ImGui::ColorEdit3("Specular", &globalLight.specular[0]);
     ImGui::End();
   }
 
@@ -692,6 +773,17 @@ void Renderer::DrawUI()
     ImGui::SliderFloat("Adjustment speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Min exposure", &minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Max exposure", &maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
+    ImGui::End();
+  }
+
+  {
+    ImGui::Begin("Screen-Space Reflections");
+    ImGui::SliderFloat("Step size", &ssr_rayStep, 0.01f, 1.0f);
+    ImGui::SliderFloat("Min step", &ssr_minRayStep, 0.01f, 1.0f);
+    ImGui::SliderFloat("Thickness", &ssr_thickness, 0.00f, 1.0f);
+    ImGui::SliderFloat("Search distance", &ssr_searchDist, 1.0f, 50.0f);
+    ImGui::SliderInt("Max steps", &ssr_maxRaySteps, 0, 100);
+    ImGui::SliderInt("Binary search steps", &ssr_binarySearchSteps, 0, 10);
     ImGui::End();
   }
 
@@ -708,6 +800,7 @@ void Renderer::DrawUI()
     ImGui::RadioButton("atrousTex", &uiViewBuffer, atrousTex);
     ImGui::RadioButton("volumetricsTex", &uiViewBuffer, volumetricsTex);
     ImGui::RadioButton("postprocessColor", &uiViewBuffer, postprocessColor);
+    ImGui::RadioButton("ssrTex", &uiViewBuffer, ssrTex);
     ImGui::End();
   }
 }

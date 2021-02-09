@@ -11,33 +11,22 @@
 #include <vector>
 #include <memory>
 
-#define MULTISAMPLE_TRICK 0
-
-
 class Renderer
 {
 public:
-  void run();
+  void Run();
 
 private:
   void InitWindow();
-
   void InitGL();
-
   void InitImGui();
-
   void MainLoop();
-
-  void CreateFramebuffers();
-
-  void CreateVAO();
-  
   void CreateScene();
-
   void Cleanup();
 
+  void CreateFramebuffers();
+  void CreateVAO();
   void DrawUI();
-
   void ApplyTonemapping(float dt);
 
   // common
@@ -60,8 +49,8 @@ private:
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex{};
   GLuint volumetricsFbo{}, volumetricsTex{}, volumetricsTexBlur{};
-  int VOLUMETRIC_BLUR_PASSES = 1;
-  int VOLUMETRIC_BLUR_STRENGTH = 3;
+  int VOLUMETRIC_BLUR_PASSES = 2;
+  int VOLUMETRIC_BLUR_STRENGTH = 2;
   const uint32_t VOLUMETRIC_WIDTH = WIDTH / 1;
   const uint32_t VOLUMETRIC_HEIGHT = HEIGHT / 1;
   GLint volumetric_steps = 50;
@@ -71,7 +60,7 @@ private:
 
   // a-trous filter stuff
   GLuint atrousFbo{}, atrousTex{};
-  bool volumetric_atrousEnabled = true;
+  unsigned atrousPasses = 1;
   float c_phi = 0.0001f;
   float n_phi = 1.0f;
   float p_phi = 1.0f;
@@ -93,6 +82,17 @@ private:
   GLuint gfbo{}, gAlbedoSpec{}, gNormal{}, gDepth{}, gShininess{};
   GLuint postprocessFbo{}, postprocessColor{};
 
+  // ssr stuff
+  GLuint ssrFbo{}, ssrTex{}, ssrTexBlur{};
+  GLuint SSR_WIDTH = WIDTH / 2;
+  GLuint SSR_HEIGHT = HEIGHT / 2;
+  float ssr_rayStep = 0.15f;
+  float ssr_minRayStep = 0.1f;
+  float ssr_thickness = 0.0f;
+  float ssr_searchDist = 15.0f;
+  int ssr_maxRaySteps = 30;
+  int ssr_binarySearchSteps = 5;
+
   // shadow stuff
   GLuint shadowFbo{}, shadowDepth{}, shadowGoodFormatFbo{}, shadowDepthGoodFormat{};
   GLuint shadowMomentBlur{};
@@ -103,16 +103,16 @@ private:
 #if MULTISAMPLE_TRICK
   const int NUM_MULTISAMPLES = 4;
 #else
-  int BLUR_PASSES = 1;
-  int BLUR_STRENGTH = 3;
+  int BLUR_PASSES = 2;
+  int BLUR_STRENGTH = 2;
 #endif
 
   // HDR stuff
   GLuint hdrfbo{}, hdrColor{}, hdrDepth{};
   GLuint histogramBuffer{}, exposureBuffer{};
   float targetLuminance = .22f;
-  float minExposure = .25f;
-  float maxExposure = 20.0f;
+  float minExposure = .1f;
+  float maxExposure = 100.0f;
   float exposureFactor = 1.0f;
   float adjustmentSpeed = 2.0f;
   const int NUM_BUCKETS = 128;

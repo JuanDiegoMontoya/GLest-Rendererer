@@ -4,11 +4,11 @@
 layout (location = 0) in vec2 vTexCoord;
 
 layout (location = 0) uniform sampler2D gColor;
-layout (location = 3) uniform float c_phi;
-layout (location = 6) uniform float stepwidth;
-layout (location = 8) uniform ivec2 u_resolution;
-layout (location = 9) uniform float kernel[25];
-layout (location = 34) uniform vec2 offsets[25];
+layout (location = 1) uniform float c_phi;
+layout (location = 2) uniform float stepwidth;
+layout (location = 3) uniform ivec2 u_resolution;
+layout (location = 4) uniform float kernel[25];
+layout (location = 29) uniform vec2 offsets[25];
 
 layout (location = 0) out vec4 fragColor;
 

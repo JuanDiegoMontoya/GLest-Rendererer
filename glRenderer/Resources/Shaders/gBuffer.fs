@@ -33,11 +33,14 @@ void main()
   {
     discard;
   }
-  vec3 normal = vNormal;
+  vec3 normal = TBN[2];
   if (u_object.hasNormal)
   {
-    normal = texture(u_object.normal, vTexCoord).rgb * 2.0 - 1.0;
-    normal = TBN * normal;
+    if (normal == vec3(0.0)) // disables normal mapping
+    {
+      normal = texture(u_object.normal, vTexCoord).rgb * 2.0 - 1.0;
+      normal = TBN * normal;
+    }
   }
   gNormal = float32x3_to_oct(normalize(normal));
   //gNormal.xyz = normalize(normal);

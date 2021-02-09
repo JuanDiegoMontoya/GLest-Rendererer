@@ -8,7 +8,7 @@ int main()
 
   try
   {
-    app.run();
+    app.Run();
   }
   catch (const std::exception& e)
   {
@@ -20,12 +20,13 @@ int main()
 }
 
 // TODO list (unordered)
+// fix normal mapping
 // skybox
 // image-based lighting
-// imgui
 // tiled/clustered shading
 // efficient draw call submission/multi draw
 // PBR
 
 // DONE
+// imgui
 // VSM
