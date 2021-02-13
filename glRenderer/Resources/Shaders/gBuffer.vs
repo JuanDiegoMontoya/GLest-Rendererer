@@ -22,7 +22,7 @@ void main()
   vNormal = u_normalMatrix * aNormal;
   vec3 T = normalize(vec3(u_model * vec4(aTangent, 0.0)));
   vec3 N = normalize(vec3(u_model * vec4(aNormal, 0.0)));
-  //T = normalize(T - dot(T, N) * N);
+  T = normalize(T - dot(T, N) * N);
   vec3 B = cross(N, T);
   //vec3 B = normalize(vec3(u_model * vec4(aBitangent, 0.0)));
   TBN = mat3(T, B, N);

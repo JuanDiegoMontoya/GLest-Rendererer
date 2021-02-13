@@ -65,7 +65,7 @@ private:
   float n_phi = 1.0f;
   float p_phi = 1.0f;
   float stepWidth = 1.0f;
-  const float atrouskernel[25] = {
+  const float atrouskernel[25] = { // 5x5 gaussian kernel with std dev=1.75 (I think)
     0.015026f, 0.028569f, 0.035391f, 0.028569f, 0.015026f,
     0.028569f, 0.054318f, 0.067288f, 0.054318f, 0.028569f,
     0.035391f, 0.067288f, 0.083355f, 0.067288f, 0.035391f,

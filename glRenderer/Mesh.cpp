@@ -5,6 +5,7 @@
 #include <glad/glad.h>
 #include "Texture.h"
 #include <map>
+#include <glm/gtc/matrix_transform.hpp>
 
 Mesh::Mesh(const std::vector<Vertex>& vertices, Material mat) : vertexCount(vertices.size()), material(mat)
 {
@@ -113,13 +114,24 @@ std::vector<Mesh> LoadObj(std::string path)
       bitangent.x = ff * (-deltaUV2.y * edge1.x + deltaUV1.y * edge2.x);
       bitangent.y = ff * (-deltaUV2.y * edge1.y + deltaUV1.y * edge2.y);
       bitangent.z = ff * (-deltaUV2.y * edge1.z + deltaUV1.y * edge2.z);
-      if (glm::dot(vertices[vertices.size() - 1].normal, glm::cross(tangent, bitangent)) < 0)
+
+      // correct tangents for each vertex normal
+      glm::vec3 e1 = glm::normalize(edge1);
+      glm::vec3 e2 = glm::normalize(edge2);
+      glm::vec3 faceNorm = glm::cross(e1, e2);
+      for (int i = 0; i < 3; i++)
       {
-        tangent = -tangent;
+        const glm::vec3 vertexNorm = vertices[vertices.size() - (3 - i)].normal;
+        const float angle = glm::acos(glm::dot(faceNorm, vertexNorm));
+        const glm::vec3 axis = -glm::cross(faceNorm, vertexNorm);
+        const glm::mat4 rot = glm::rotate(glm::mat4(1), angle, axis);
+        const glm::vec3 vertexTangent = rot * glm::vec4(tangent, 0.0f);
+        vertices[vertices.size() - (3 - i)].tangent = tangent; // todo
+        vertices[vertices.size() - (3 - i)].normal = vertexNorm;
       }
-      vertices[vertices.size() - 3].tangent = tangent;
-      vertices[vertices.size() - 2].tangent = tangent;
-      vertices[vertices.size() - 1].tangent = tangent;
+      //vertices[vertices.size() - 3].tangent = tangent;
+      //vertices[vertices.size() - 2].tangent = tangent;
+      //vertices[vertices.size() - 1].tangent = tangent;
       //vertices[vertices.size() - 3].bitangent = bitangent;
       //vertices[vertices.size() - 2].bitangent = bitangent;
       //vertices[vertices.size() - 1].bitangent = bitangent;
@@ -159,10 +171,10 @@ std::vector<Mesh> LoadObj(std::string path)
         else
         {
           std::cout << "Creating material: " << prevName << std::endl;
-          material.diffuseTex = new Texture2D(diffuseName);
-          material.alphaMaskTex = new Texture2D(maskName);
-          material.specularTex = new Texture2D(specularName);
-          material.normalTex = new Texture2D(normalName);
+          material.diffuseTex = new Texture2D(diffuseName, true);
+          material.alphaMaskTex = new Texture2D(maskName, false);
+          material.specularTex = new Texture2D(specularName, true);
+          material.normalTex = new Texture2D(normalName, false);
           material.hasSpecular = material.specularTex->Valid();
           material.hasAlpha = material.alphaMaskTex->Valid();
           material.hasNormal = material.normalTex->Valid();

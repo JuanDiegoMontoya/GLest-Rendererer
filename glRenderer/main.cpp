@@ -20,13 +20,14 @@ int main()
 }
 
 // TODO list (unordered)
-// fix normal mapping
 // skybox
 // image-based lighting
 // tiled/clustered shading
 // efficient draw call submission/multi draw
 // PBR
+// correctly account for shininess term in SSR
 
 // DONE
 // imgui
 // VSM
+// fix normal mapping

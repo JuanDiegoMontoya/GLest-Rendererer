@@ -80,7 +80,7 @@ void Renderer::InitImGui()
 
 void Renderer::MainLoop()
 {
-  bluenoiseTex = std::make_unique<Texture2D>("Resources/Textures/bluenoise_32.png");
+  bluenoiseTex = std::make_unique<Texture2D>("Resources/Textures/bluenoise_32.png", false);
 
   CreateFramebuffers();
 

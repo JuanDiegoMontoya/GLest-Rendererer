@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <glad/glad.h>
 
-Texture2D::Texture2D(std::string_view path)
+Texture2D::Texture2D(std::string_view path, bool isSRGB)
 {
   stbi_set_flip_vertically_on_load(true);
 
@@ -36,7 +36,7 @@ Texture2D::Texture2D(std::string_view path)
   glTextureParameteri(rendererID_, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
 
-  glTextureStorage2D(rendererID_, 1, GL_SRGB8_ALPHA8, dim_.x, dim_.y);
+  glTextureStorage2D(rendererID_, 1, isSRGB ? GL_SRGB8_ALPHA8 : GL_RGBA8, dim_.x, dim_.y);
   glTextureSubImage2D(
     rendererID_,
     0,              // mip level 0
