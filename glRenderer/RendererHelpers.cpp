@@ -98,18 +98,18 @@ void CompileShaders()
   Shader::shaders["gaussian_blur1"].emplace(Shader(
     { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 1"}}} }));
 
-  Shader::shaders["gaussian16f_blur6"].emplace(Shader(
-    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 6"}, {"#define FORMAT RG32f", "#define FORMAT R16f"}}} }));
-  Shader::shaders["gaussian16f_blur5"].emplace(Shader(
-    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 5"}, {"#define FORMAT RG32f", "#define FORMAT R16f"}}} }));
-  Shader::shaders["gaussian16f_blur4"].emplace(Shader(
-    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 4"}, {"#define FORMAT RG32f", "#define FORMAT R16f"}}} }));
-  Shader::shaders["gaussian16f_blur3"].emplace(Shader(
-    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 3"}, {"#define FORMAT RG32f", "#define FORMAT R16f"}}} }));
-  Shader::shaders["gaussian16f_blur2"].emplace(Shader(
-    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 2"}, {"#define FORMAT RG32f", "#define FORMAT R16f"}}} }));
-  Shader::shaders["gaussian16f_blur1"].emplace(Shader(
-    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 1"}, {"#define FORMAT RG32f", "#define FORMAT R16f"}}} }));
+  Shader::shaders["gaussian32f_blur6"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 6"}, {"#define FORMAT RG32f", "#define FORMAT R32f"}}} }));
+  Shader::shaders["gaussian32f_blur5"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 5"}, {"#define FORMAT RG32f", "#define FORMAT R32f"}}} }));
+  Shader::shaders["gaussian32f_blur4"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 4"}, {"#define FORMAT RG32f", "#define FORMAT R32f"}}} }));
+  Shader::shaders["gaussian32f_blur3"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 3"}, {"#define FORMAT RG32f", "#define FORMAT R32f"}}} }));
+  Shader::shaders["gaussian32f_blur2"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 2"}, {"#define FORMAT RG32f", "#define FORMAT R32f"}}} }));
+  Shader::shaders["gaussian32f_blur1"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 1"}, {"#define FORMAT RG32f", "#define FORMAT R32f"}}} }));
   
   Shader::shaders["tonemap"].emplace(Shader(
     {
@@ -129,6 +129,10 @@ void CompileShaders()
     {
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
       { "vsm_copy.fs", GL_FRAGMENT_SHADER }
+    }));
+  Shader::shaders["esm_copy"].emplace(Shader(
+    { { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+    { "esm_copy.fs", GL_FRAGMENT_SHADER }
     }));
   Shader::shaders["atrous"].emplace(Shader(
     {
@@ -199,18 +203,18 @@ void blurTexture32rgf(GLuint inOutTex, GLuint intermediateTexture, GLint width, 
   }
 }
 
-void blurTexture16rf(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
+void blurTexture32rf(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
 {
   auto& shader = [strength]() -> auto&
   {
     switch (strength)
     {
-    case 6: return Shader::shaders["gaussian16f_blur6"];
-    case 5: return Shader::shaders["gaussian16f_blur5"];
-    case 4: return Shader::shaders["gaussian16f_blur4"];
-    case 3: return Shader::shaders["gaussian16f_blur3"];
-    case 2: return Shader::shaders["gaussian16f_blur2"];
-    default: return Shader::shaders["gaussian16f_blur1"];
+    case 6: return Shader::shaders["gaussian32f_blur6"];
+    case 5: return Shader::shaders["gaussian32f_blur5"];
+    case 4: return Shader::shaders["gaussian32f_blur4"];
+    case 3: return Shader::shaders["gaussian32f_blur3"];
+    case 2: return Shader::shaders["gaussian32f_blur2"];
+    default: return Shader::shaders["gaussian32f_blur1"];
     }
   }();
   shader->Bind();
@@ -228,7 +232,7 @@ void blurTexture16rf(GLuint inOutTex, GLuint intermediateTexture, GLint width, G
   {
     // read from inTex on first pass only
     glBindTextureUnit(0, inOutTex);
-    glBindImageTexture(0, intermediateTexture, 0, false, 0, GL_WRITE_ONLY, GL_R16F);
+    glBindImageTexture(0, intermediateTexture, 0, false, 0, GL_WRITE_ONLY, GL_R32F);
     shader->SetBool("u_horizontal", horizontal);
     glDispatchCompute(xgroups, ygroups, 1);
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);

@@ -3,11 +3,11 @@
 layout (location = 0) in vec2 vTexCoord;
 
 layout (location = 0, binding = 0) uniform sampler2D u_tex;
+layout (location = 1) uniform float u_C;
 
-layout (location = 0) out vec2 outMoments;
+layout (location = 0) out float expDepth;
 
 void main()
 {
-  float depth = texture(u_tex, vTexCoord).r;
-  outMoments.xy = vec2(depth, depth * depth);
+  expDepth = exp(u_C * texture(u_tex, vTexCoord).r);
 }

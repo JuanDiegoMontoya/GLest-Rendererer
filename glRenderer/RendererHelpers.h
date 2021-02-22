@@ -14,5 +14,5 @@ void drawFSTexture(GLuint texID);
 
 void blurTexture32rgf(GLuint inOutTex, GLuint intermediateTexture, 
   GLint width, GLint height, GLint passes, GLint strength);
-void blurTexture16rf(GLuint inOutTex, GLuint intermediateTexture, 
+void blurTexture32rf(GLuint inOutTex, GLuint intermediateTexture,
   GLint width, GLint height, GLint passes, GLint strength);

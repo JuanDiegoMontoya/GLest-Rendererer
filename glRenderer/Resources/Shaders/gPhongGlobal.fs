@@ -14,16 +14,19 @@ struct DirLight
 
 layout (location = 0) in vec2 vTexCoord;
 
-layout (location = 0) uniform sampler2D gNormal;
-layout (location = 1) uniform sampler2D gAlbedoSpec;
-layout (location = 2) uniform sampler2D gShininess;
-layout (location = 3) uniform sampler2D gDepth;
-layout (location = 4) uniform sampler2D shadowMoments;
+layout (location = 0, binding = 0) uniform sampler2D gNormal;
+layout (location = 1, binding = 1) uniform sampler2D gAlbedoSpec;
+layout (location = 2, binding = 2) uniform sampler2D gShininess;
+layout (location = 3, binding = 3) uniform sampler2D gDepth;
+layout (location = 4, binding = 4) uniform sampler2D shadowMap; // PCF
+layout (location = 5, binding = 5) uniform sampler2D filteredShadow; // ESM or VSM
 layout (location = 6) uniform vec3 u_viewPos;
 layout (location = 7) uniform mat4 u_lightMatrix;
 layout (location = 8) uniform mat4 u_invViewProj;
 layout (location = 9) uniform float u_lightBleedFix = .9;
-layout (location = 10) uniform DirLight u_globalLight;
+layout (location = 10) uniform bool u_use_esm = false;
+layout (location = 11) uniform float u_C;
+layout (location = 12) uniform DirLight u_globalLight;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -57,11 +60,28 @@ float Chebyshev(vec2 moments, float t)
   return max(p, p_max);
 }
 
-float Shadow(vec4 lightSpacePos)
+float ShadowVSM(vec4 lightSpacePos)
 {
   vec3 LightTexCoord = ShadowTexCoord(lightSpacePos);
-  vec2 moments = texture(shadowMoments, LightTexCoord.xy).xy;
-  return 1.0 - Chebyshev(moments, LightTexCoord.z);
+  vec2 moments = texture(filteredShadow, LightTexCoord.xy).xy;
+  return Chebyshev(moments, LightTexCoord.z);
+}
+
+float ShadowESM(vec4 lightSpacePos)
+{
+  vec3 LightTexCoord = ShadowTexCoord(lightSpacePos);
+  float lightDepth = texture(filteredShadow, LightTexCoord.xy).x;
+  float eyeDepth = LightTexCoord.z;
+  float shadowFacktor = lightDepth * exp(-u_C * eyeDepth);
+  return clamp(shadowFacktor, 0.0, 1.0);
+}
+
+float Shadow(vec4 lightSpacePos)
+{
+  if (u_use_esm)
+    return ShadowESM(lightSpacePos);
+  else
+    return ShadowVSM(lightSpacePos);
 }
 
 void main()
@@ -98,6 +118,6 @@ void main()
   {
     shadow = Shadow(lightSpacePos);
   }
-  fragColor = vec4((ambient + (1.0 - shadow) * (diffuse + specu)), 1.0);
-  //fragColor = fragColor * .0001 + vec4(1.0 - shadow); // view shadow
+  fragColor = vec4((ambient + (shadow) * (diffuse + specu)), 1.0);
+  //fragColor = fragColor * .0001 + vec4(shadow); // view shadow
 }

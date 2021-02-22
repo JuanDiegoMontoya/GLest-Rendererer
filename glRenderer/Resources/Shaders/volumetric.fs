@@ -3,11 +3,11 @@
 
 layout (location = 0) in vec2 vTexCoord;
 
-layout (location = 1) uniform sampler2D gDepth;
-layout (location = 2) uniform sampler2D shadowDepth;
-layout (location = 3) uniform mat4 u_invViewProj;
-layout (location = 4) uniform mat4 u_lightMatrix;
-layout (location = 5) uniform sampler2D u_blueNoise;
+layout (location = 1, binding = 1) uniform sampler2D gDepth;
+layout (location = 2, binding = 2) uniform sampler2D shadowDepth;
+layout (location = 3, binding = 3) uniform sampler2D u_blueNoise;
+layout (location = 4) uniform mat4 u_invViewProj;
+layout (location = 5) uniform mat4 u_lightMatrix;
 layout (location = 6) uniform ivec2 u_screenSize;
 layout (location = 8) uniform int NUM_STEPS = 50;
 layout (location = 9) uniform float intensity = .02;

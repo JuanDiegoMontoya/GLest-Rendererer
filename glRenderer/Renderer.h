@@ -35,6 +35,7 @@ private:
   const uint32_t HEIGHT = 810;
   GLuint vao{};
   bool cursorVisible = false;
+  float deviceAnisotropy{ 0.0f };
 
   // scene info
   Camera cam;
@@ -57,6 +58,7 @@ private:
   float volumetric_intensity = .02f;
   float volumetric_distToFull = 20.0f;
   float volumetric_noiseOffset = 1.0f;
+  bool volumetric_enabled = true;
 
   // a-trous filter stuff
   GLuint atrousFbo{}, atrousTex{};
@@ -92,20 +94,25 @@ private:
   float ssr_searchDist = 15.0f;
   int ssr_maxRaySteps = 30;
   int ssr_binarySearchSteps = 5;
+  bool ssr_enabled = true;
 
-  // shadow stuff
-  GLuint shadowFbo{}, shadowDepth{}, shadowGoodFormatFbo{}, shadowDepthGoodFormat{};
-  GLuint shadowMomentBlur{};
-  GLuint shadowTargetFbo{}, shadowDepthTarget{}, shadowDepthSquaredTarget{};
+  // generic shadow stuff
+  GLuint shadowFbo{}, shadowDepth{};
   GLuint SHADOW_WIDTH = 1024;
   GLuint SHADOW_HEIGHT = 1024;
-  float lightBleedFix = .9f;
-#if MULTISAMPLE_TRICK
-  const int NUM_MULTISAMPLES = 4;
-#else
-  int BLUR_PASSES = 2;
-  int BLUR_STRENGTH = 2;
-#endif
+  GLuint SHADOW_LEVELS = glm::ceil(glm::log2((float)glm::max(SHADOW_WIDTH, SHADOW_HEIGHT)));
+  int BLUR_PASSES = 1;
+  int BLUR_STRENGTH = 5;
+  int use_esm = 1;
+
+  // variance shadow stuff
+  GLuint vshadowGoodFormatFbo{}, vshadowDepthGoodFormat{};
+  GLuint vshadowMomentBlur{};
+  float vlightBleedFix = .9f;
+
+  // exponential shadow stuff
+  GLuint eShadowFbo{}, eExpShadowDepth{}, eShadowDepthBlur{};
+  float eConstant{ 80.0f };
 
   // HDR stuff
   GLuint hdrfbo{}, hdrColor{}, hdrDepth{};
