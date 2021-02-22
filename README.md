@@ -3,7 +3,7 @@ OpenGL renderer and effects playground.
 
 ## Features
 - Deferred shading with many lights pass
-- Filtered variance shadow mapping
+- Filtered variance shadow mapping (VSM) and exponential shadow mapping (ESM)
 - Volumetric lighting
   - Blurred with edge-avoiding À-Trous filter
 - Normal mapping
