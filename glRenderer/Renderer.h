@@ -11,6 +11,11 @@
 #include <vector>
 #include <memory>
 
+#define SHADOW_METHOD_PCF 0
+#define SHADOW_METHOD_VSM 1
+#define SHADOW_METHOD_ESM 2
+#define SHADOW_METHOD_MSM 3
+
 class Renderer
 {
 public:
@@ -103,7 +108,8 @@ private:
   GLuint SHADOW_LEVELS = glm::ceil(glm::log2((float)glm::max(SHADOW_WIDTH, SHADOW_HEIGHT)));
   int BLUR_PASSES = 1;
   int BLUR_STRENGTH = 5;
-  int use_esm = 1;
+  int shadow_method = SHADOW_METHOD_ESM;
+  bool shadow_gen_mips = false;
 
   // variance shadow stuff
   GLuint vshadowGoodFormatFbo{}, vshadowDepthGoodFormat{};

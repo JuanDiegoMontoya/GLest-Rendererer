@@ -3,6 +3,11 @@
 
 #define SPECULAR_STRENGTH 5
 
+#define SHADOW_METHOD_PCF 0
+#define SHADOW_METHOD_VSM 1
+#define SHADOW_METHOD_ESM 2
+#define SHADOW_METHOD_MSM 3
+
 struct DirLight
 {
   vec3 ambient;
@@ -24,7 +29,7 @@ layout (location = 6) uniform vec3 u_viewPos;
 layout (location = 7) uniform mat4 u_lightMatrix;
 layout (location = 8) uniform mat4 u_invViewProj;
 layout (location = 9) uniform float u_lightBleedFix = .9;
-layout (location = 10) uniform bool u_use_esm = false;
+layout (location = 10) uniform int u_shadowMethod = SHADOW_METHOD_ESM;
 layout (location = 11) uniform float u_C;
 layout (location = 12) uniform DirLight u_globalLight;
 
@@ -76,12 +81,19 @@ float ShadowESM(vec4 lightSpacePos)
   return clamp(shadowFacktor, 0.0, 1.0);
 }
 
+float ShadowMSM(vec4 lightSpacePos)
+{
+  return 1.0;
+}
+
 float Shadow(vec4 lightSpacePos)
 {
-  if (u_use_esm)
-    return ShadowESM(lightSpacePos);
-  else
-    return ShadowVSM(lightSpacePos);
+  switch (u_shadowMethod)
+  {
+    case SHADOW_METHOD_ESM: return ShadowESM(lightSpacePos);
+    case SHADOW_METHOD_VSM: return ShadowVSM(lightSpacePos);
+    default: return 1.0;
+  }
 }
 
 void main()
@@ -113,11 +125,11 @@ void main()
   vec3 diffuse = u_globalLight.diffuse * diff * albedo;
   vec3 specu = u_globalLight.specular * spec * specular;
 
-  float shadow = 1.0;
+  float shadow = 0.0;
   if (diff > 0.0) // only shadow light-facing pixels
   {
     shadow = Shadow(lightSpacePos);
   }
-  fragColor = vec4((ambient + (shadow) * (diffuse + specu)), 1.0);
+  fragColor = vec4((ambient + (shadow) * (diffuse + step(.005, shadow) * specu)), 1.0);
   //fragColor = fragColor * .0001 + vec4(shadow); // view shadow
 }

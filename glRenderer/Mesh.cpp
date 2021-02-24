@@ -5,17 +5,50 @@
 #include <glad/glad.h>
 #include "Texture.h"
 #include <map>
+#include <unordered_map>
+#include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 
-Mesh::Mesh(const std::vector<Vertex>& vertices, Material mat) : vertexCount(vertices.size()), material(mat)
+inline void hash_combine(std::size_t& seed) {}
+
+template <typename T, typename... Rest>
+inline void hash_combine(std::size_t& seed, const T& v, Rest... rest)
 {
-  glCreateBuffers(1, &id);
-  glNamedBufferStorage(id, vertexCount * sizeof(Vertex), vertices.data(), 0);
+  std::hash<T> hasher;
+  seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+  hash_combine(seed, rest...);
+}
+
+namespace std
+{
+  template<> struct hash<Vertex>
+  {
+    std::size_t operator()(const Vertex& v) const noexcept
+    {
+      std::size_t h1 = std::hash<glm::vec3>{}((v.position));
+      std::size_t h2 = std::hash<glm::vec3>{}((v.normal));
+      std::size_t h3 = std::hash<glm::vec2>{}((v.uv));
+      std::size_t seed = 0;
+      hash_combine(seed, h1, h2, h3);
+      return seed;
+    }
+  };
+}
+
+Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices, const Material& mat)
+  : vertexCount(indices.size()), material(mat)
+{
+  glCreateBuffers(1, &vboID);
+  glCreateBuffers(1, &eboID);
+  glNamedBufferStorage(vboID, vertices.size() * sizeof(Vertex), vertices.data(), 0);
+  glNamedBufferStorage(eboID, indices.size() * sizeof(uint32_t), indices.data(), 0);
 }
 
 Mesh::~Mesh()
 {
-  glDeleteBuffers(1, &id);
+  glDeleteBuffers(1, &vboID);
+  glDeleteBuffers(1, &eboID);
 }
 
 std::vector<Mesh> LoadObj(std::string path)
@@ -52,7 +85,8 @@ std::vector<Mesh> LoadObj(std::string path)
   auto& attrib = reader.GetAttrib();
   auto& shapes = reader.GetShapes();
   auto& materials = reader.GetMaterials();
-  
+
+
   // Loop over shapes
   for (size_t s = 0; s < shapes.size(); s++)
   {
@@ -89,8 +123,9 @@ std::vector<Mesh> LoadObj(std::string path)
           tx = attrib.texcoords[2 * idx.texcoord_index + 0];
           ty = attrib.texcoords[2 * idx.texcoord_index + 1];
         }
-        
-        vertices.push_back({ {vx, vy, vz}, { nx, ny, nz }, {tx, ty} });
+
+        Vertex vertex{ {vx, vy, vz}, { nx, ny, nz }, {tx, ty} };
+        vertices.push_back(vertex);
       }
       index_offset += fv;
 
@@ -116,19 +151,20 @@ std::vector<Mesh> LoadObj(std::string path)
       bitangent.z = ff * (-deltaUV2.y * edge1.z + deltaUV1.y * edge2.z);
 
       // correct tangents for each vertex normal
-      glm::vec3 e1 = glm::normalize(edge1);
-      glm::vec3 e2 = glm::normalize(edge2);
-      glm::vec3 faceNorm = glm::cross(e1, e2);
-      for (int i = 0; i < 3; i++)
-      {
-        const glm::vec3 vertexNorm = vertices[vertices.size() - (3 - i)].normal;
-        const float angle = glm::acos(glm::dot(faceNorm, vertexNorm));
-        const glm::vec3 axis = -glm::cross(faceNorm, vertexNorm);
-        const glm::mat4 rot = glm::rotate(glm::mat4(1), angle, axis);
-        const glm::vec3 vertexTangent = rot * glm::vec4(tangent, 0.0f);
-        vertices[vertices.size() - (3 - i)].tangent = tangent; // todo
-        vertices[vertices.size() - (3 - i)].normal = vertexNorm;
-      }
+      //glm::vec3 e1 = glm::normalize(edge1);
+      //glm::vec3 e2 = glm::normalize(edge2);
+      //glm::vec3 faceNorm = glm::cross(e1, e2);
+      //for (int i = 0; i < 3; i++)
+      //{
+      //  const glm::vec3 vertexNorm = vertices[vertices.size() - (3 - i)].normal;
+      //  const float angle = glm::acos(glm::dot(faceNorm, vertexNorm));
+      //  const glm::vec3 axis = -glm::cross(faceNorm, vertexNorm);
+      //  const glm::mat4 rot = glm::rotate(glm::mat4(1), angle, axis);
+      //  const glm::vec3 vertexTangent = rot * glm::vec4(tangent, 0.0f);
+      //  vertices[vertices.size() - (3 - i)].tangent = tangent; // todo
+      //  vertices[vertices.size() - (3 - i)].normal = vertexNorm;
+      //}
+
       //vertices[vertices.size() - 3].tangent = tangent;
       //vertices[vertices.size() - 2].tangent = tangent;
       //vertices[vertices.size() - 1].tangent = tangent;
@@ -171,17 +207,47 @@ std::vector<Mesh> LoadObj(std::string path)
         else
         {
           std::cout << "Creating material: " << prevName << std::endl;
-          material.diffuseTex = new Texture2D(diffuseName, true);
-          material.alphaMaskTex = new Texture2D(maskName, false);
-          material.specularTex = new Texture2D(specularName, true);
-          material.normalTex = new Texture2D(normalName, false);
+          material.diffuseTex = new Texture2D(diffuseName, true, true);
+          material.alphaMaskTex = new Texture2D(maskName, false, true);
+          material.specularTex = new Texture2D(specularName, true, true);
+          material.normalTex = new Texture2D(normalName, false, true);
           material.hasSpecular = material.specularTex->Valid();
           material.hasAlpha = material.alphaMaskTex->Valid();
           material.hasNormal = material.normalTex->Valid();
           material.shininess = shininess;
           materialMap[prevName] = material;
         }
-        meshes.emplace_back(vertices, material);
+
+        uint32_t currentVertexIndex = 0;
+        std::unordered_map<Vertex, uint32_t> verticesUnique;
+        std::vector<uint32_t> indices;
+        for (const auto& vertex : vertices)
+        {
+          auto pp = verticesUnique.insert({ vertex, currentVertexIndex });
+          if (pp.second) // insertion took place
+          {
+            currentVertexIndex++;
+          }
+          indices.push_back(pp.first->second); // index mapped to that vertex
+        }
+
+        std::vector<Vertex> vertices2;
+        std::vector<std::pair<Vertex, uint32_t>> orderedVertices(verticesUnique.begin(), verticesUnique.end());
+        std::sort(orderedVertices.begin(), orderedVertices.end(),
+          [](const auto& p1, const auto& p2) { assert(p1.second != p2.second); return p1.second < p2.second; });
+        for (const auto& p : orderedVertices)
+        {
+          vertices2.push_back(p.first);
+        }
+        meshes.emplace_back(vertices2, indices, material);
+
+        // test
+        //{
+        //  indices.clear();
+        //  for (uint32_t i = 0; i < vertices.size(); i++)
+        //    indices.push_back(i);
+        //  meshes.emplace_back(vertices, indices, material);
+        //}
         vertices.clear();
       }
       prevName = name;

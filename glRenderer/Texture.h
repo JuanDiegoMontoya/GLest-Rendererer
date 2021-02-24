@@ -5,7 +5,7 @@
 class Texture2D
 {
 public:
-  Texture2D(std::string_view path, bool isSRGB);
+  Texture2D(std::string_view path, bool isSRGB, bool genMips);
   Texture2D(const Texture2D& rhs) = delete;
   Texture2D& operator=(Texture2D&& rhs) noexcept;
   Texture2D(Texture2D&& rhs) noexcept;

@@ -7,11 +7,18 @@ class Texture2D;
 
 struct Vertex
 {
-  glm::vec3 position;
-  glm::vec3 normal;
-  glm::vec2 uv;
-  glm::vec3 tangent;
+  glm::vec3 position{};
+  glm::vec3 normal{};
+  glm::vec2 uv{};
+  glm::vec3 tangent{};
   //glm::vec3 bitangent; // computed in vertex shader
+
+  bool operator==(const Vertex& v) const&
+  {
+    return position == v.position && normal == v.normal &&
+      uv == v.uv;
+  }
+  //bool operator<=>(const Vertex&) const& = default;
 };
 
 struct Material
@@ -30,11 +37,12 @@ class Mesh
 {
 public:
   Mesh() {}
-  Mesh(const std::vector<Vertex>& vertices, Material mat);
+  Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices, const Material& mat);
   ~Mesh();
   Mesh(Mesh&& other) noexcept : material(other.material)
   {
-    this->id = std::exchange(other.id, 0);
+    this->vboID = std::exchange(other.vboID, 0);
+    this->eboID = std::exchange(other.eboID, 0);
     this->vertexCount = std::exchange(other.vertexCount, 0);
   }
   Mesh& operator=(Mesh&& other) noexcept
@@ -42,13 +50,15 @@ public:
     if (&other == this) return *this;
     new(this) Mesh(std::move(other));
   }
-  unsigned GetID() const { return id; }
+  unsigned GetVBOID() const { return vboID; }
+  unsigned GetEBOID() const { return eboID; }
   unsigned GetVertexCount() const { return vertexCount; }
   const Material& GetMaterial() const { return material; }
 
 private:
   //std::vector<Vertex> vertices;
-  unsigned id{};
+  unsigned vboID{};
+  unsigned eboID{};
   unsigned vertexCount{};
   Material material{};
 };

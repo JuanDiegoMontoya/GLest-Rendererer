@@ -80,7 +80,7 @@ void Renderer::InitImGui()
 
 void Renderer::MainLoop()
 {
-  bluenoiseTex = std::make_unique<Texture2D>("Resources/Textures/bluenoise_32.png", false);
+  bluenoiseTex = std::make_unique<Texture2D>("Resources/Textures/bluenoise_32.png", false, false);
 
   CreateFramebuffers();
 
@@ -162,31 +162,61 @@ void Renderer::MainLoop()
         shadowShader->SetMat4("u_modelLight", lightMat * obj.GetModelMatrix());
         for (const auto& mesh : obj.meshes)
         {
-          glVertexArrayVertexBuffer(vao, 0, mesh->GetID(), 0, sizeof(Vertex));
-          glDrawArrays(GL_TRIANGLES, 0, mesh->GetVertexCount());
+          glVertexArrayVertexBuffer(vao, 0, mesh->GetVBOID(), 0, sizeof(Vertex));
+          glVertexArrayElementBuffer(vao, mesh->GetEBOID());
+          glDrawElements(GL_TRIANGLES, mesh->GetVertexCount(), GL_UNSIGNED_INT, nullptr);
         }
       }
     }
 
+    GLuint filteredTex{};
+    switch (shadow_method)
+    {
+    case SHADOW_METHOD_VSM: filteredTex = vshadowDepthGoodFormat; break;
+    case SHADOW_METHOD_ESM: filteredTex = eExpShadowDepth; break;
+    case SHADOW_METHOD_MSM: /* TODO: fill */break;
+    }
+
     // copy transformed shadow depth to another texture
-    glBindTextureUnit(0, shadowDepth);
-    auto& copyShader = Shader::shaders[use_esm ? "esm_copy" : "vsm_copy"];
-    copyShader->Bind();
-    if (use_esm)
+    if (shadow_method == SHADOW_METHOD_ESM || shadow_method == SHADOW_METHOD_VSM)
     {
-      copyShader->SetFloat("u_C", eConstant);
+      glBindTextureUnit(0, shadowDepth);
+
+      const char* shaderName = "none";
+      GLuint fbo{};
+      switch (shadow_method)
+      {
+      case SHADOW_METHOD_VSM: shaderName = "vsm_copy"; fbo = vshadowGoodFormatFbo; break;
+      case SHADOW_METHOD_ESM: shaderName = "esm_copy"; fbo = eShadowFbo; break;
+      case SHADOW_METHOD_MSM: shaderName = "msm_copy"; /* TODO: fill */break;
+      }
+
+      auto& copyShader = Shader::shaders[shaderName];
+      copyShader->Bind();
+      if (shadow_method == SHADOW_METHOD_ESM)
+      {
+        copyShader->SetFloat("u_C", eConstant);
+      }
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
+      if (shadow_method == SHADOW_METHOD_VSM)
+      {
+        blurTexture32rgf(vshadowDepthGoodFormat, vshadowMomentBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
+      }
+      else if (shadow_method == SHADOW_METHOD_ESM)
+      {
+        blurTexture32rf(eExpShadowDepth, eShadowDepthBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
+      }
+      else if (shadow_method == SHADOW_METHOD_MSM)
+      {
+        // do some blur thing
+      }
+
+      if (shadow_gen_mips)
+      {
+        glGenerateTextureMipmap(filteredTex);
+      }
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, use_esm ? eShadowFbo : vshadowGoodFormatFbo);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    if (!use_esm)
-    {
-      blurTexture32rgf(vshadowDepthGoodFormat, vshadowMomentBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
-    }
-    else
-    {
-      blurTexture32rf(eExpShadowDepth, eShadowDepthBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
-    }
-    glGenerateTextureMipmap(use_esm ? eExpShadowDepth : vshadowDepthGoodFormat);
 
     glViewport(0, 0, WIDTH, HEIGHT);
 
@@ -200,7 +230,7 @@ void Renderer::MainLoop()
       gBufferShader->SetInt("u_object.diffuse", 0);
       gBufferShader->SetInt("u_object.alpha", 1);
       gBufferShader->SetInt("u_object.specular", 2);
-      gBufferShader->SetInt("u_object.normal", 3);
+      //gBufferShader->SetInt("u_object.normal", 3);
 
       for (const auto& obj : objects)
       {
@@ -208,16 +238,17 @@ void Renderer::MainLoop()
         gBufferShader->SetMat3("u_normalMatrix", obj.GetNormalMatrix());
         for (const auto& mesh : obj.meshes)
         {
-          glVertexArrayVertexBuffer(vao, 0, mesh->GetID(), 0, sizeof(Vertex));
           gBufferShader->SetBool("u_object.hasSpecular", mesh->GetMaterial().hasSpecular);
           gBufferShader->SetBool("u_object.hasAlpha", mesh->GetMaterial().hasAlpha);
-          gBufferShader->SetBool("u_object.hasNormal", mesh->GetMaterial().hasNormal);
+          //gBufferShader->SetBool("u_object.hasNormal", mesh->GetMaterial().hasNormal);
           gBufferShader->SetFloat("u_object.shininess", mesh->GetMaterial().shininess);
           glBindTextureUnit(0, mesh->GetMaterial().diffuseTex->GetID());
           glBindTextureUnit(1, mesh->GetMaterial().alphaMaskTex->GetID());
           glBindTextureUnit(2, mesh->GetMaterial().specularTex->GetID());
           glBindTextureUnit(3, mesh->GetMaterial().normalTex->GetID());
-          glDrawArrays(GL_TRIANGLES, 0, mesh->GetVertexCount());
+          glVertexArrayVertexBuffer(vao, 0, mesh->GetVBOID(), 0, sizeof(Vertex));
+          glVertexArrayElementBuffer(vao, mesh->GetEBOID());
+          glDrawElements(GL_TRIANGLES, mesh->GetVertexCount(), GL_UNSIGNED_INT, nullptr);
         }
       }
     }
@@ -229,14 +260,14 @@ void Renderer::MainLoop()
     glBindTextureUnit(2, gShininess);
     glBindTextureUnit(3, gDepth);
     glBindTextureUnit(4, shadowDepth);
-    glBindTextureUnit(5, use_esm ? eExpShadowDepth : vshadowDepthGoodFormat);
+    glBindTextureUnit(5, filteredTex);
 
     // global light pass (and apply shadow)
     {
       glDisable(GL_DEPTH_TEST);
       auto& gPhongGlobal = Shader::shaders["gPhongGlobal"];
       gPhongGlobal->Bind();
-      gPhongGlobal->SetBool("u_use_esm", use_esm);
+      gPhongGlobal->SetInt("u_shadowMethod", shadow_method);
       gPhongGlobal->SetFloat("u_C", eConstant);
       gPhongGlobal->SetVec3("u_viewPos", cam.GetPos());
       gPhongGlobal->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
@@ -270,8 +301,9 @@ void Renderer::MainLoop()
       gPhongLocal->SetInt("gDepth", 3);
       glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
       glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, lightSSBO);
-      glVertexArrayVertexBuffer(vao, 0, sphere.GetID(), 0, sizeof(Vertex));
-      glDrawArraysInstanced(GL_TRIANGLES, 0, sphere.GetVertexCount(), localLights.size());
+      glVertexArrayVertexBuffer(vao, 0, sphere.GetVBOID(), 0, sizeof(Vertex));
+      glVertexArrayElementBuffer(vao, sphere.GetEBOID());
+      glDrawElementsInstanced(GL_TRIANGLES, sphere.GetVertexCount(), GL_UNSIGNED_INT, nullptr, localLights.size());
     }
 
     // volumetric/crepuscular/god rays pass (write to volumetrics texture)
@@ -744,15 +776,32 @@ void Renderer::DrawUI()
   {
     ImGui::Begin("Shadows");
     ImGui::Text("Method");
-    ImGui::RadioButton("VSM", &use_esm, 0);
+    ImGui::RadioButton("PCF", &shadow_method, SHADOW_METHOD_PCF);
     ImGui::SameLine();
-    ImGui::RadioButton("ESM", &use_esm, 1);
+    ImGui::RadioButton("VSM", &shadow_method, SHADOW_METHOD_VSM);
+    ImGui::SameLine();
+    ImGui::RadioButton("ESM", &shadow_method, SHADOW_METHOD_ESM);
+    ImGui::SameLine();
+    ImGui::RadioButton("MSM", &shadow_method, SHADOW_METHOD_MSM);
     ImGui::Separator();
 
     ImGui::SliderInt("Blur passes", &BLUR_PASSES, 0, 5);
     ImGui::SliderInt("Blur width", &BLUR_STRENGTH, 0, 6);
     ImGui::SliderFloat("(VSM) Hardness", &vlightBleedFix, 0.0f, 1.0f, "%.3f");
     ImGui::SliderFloat("(ESM) C", &eConstant, 60, 90);
+    if (ImGui::Checkbox("Generate Mips", &shadow_gen_mips))
+    {
+      if (shadow_gen_mips)
+      {
+        glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+      }
+      else
+      {
+        glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      }
+    }
     ImGui::End();
   }
 

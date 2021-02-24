@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <glad/glad.h>
 
-Texture2D::Texture2D(std::string_view path, bool isSRGB)
+Texture2D::Texture2D(std::string_view path, bool isSRGB, bool genMips)
 {
   stbi_set_flip_vertically_on_load(true);
 
@@ -30,13 +30,17 @@ Texture2D::Texture2D(std::string_view path, bool isSRGB)
   glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &a);
   glTextureParameterf(rendererID_, GL_TEXTURE_MAX_ANISOTROPY, a);
 
-  glTextureParameteri(rendererID_, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTextureParameteri(rendererID_, GL_TEXTURE_MIN_FILTER, genMips ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
   glTextureParameteri(rendererID_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTextureParameteri(rendererID_, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTextureParameteri(rendererID_, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-
-  glTextureStorage2D(rendererID_, 1, isSRGB ? GL_SRGB8_ALPHA8 : GL_RGBA8, dim_.x, dim_.y);
+  GLuint levels = 1;
+  if (genMips)
+  {
+    levels = glm::ceil(glm::log2((float)glm::min(dim_.x, dim_.y)));
+  }
+  glTextureStorage2D(rendererID_, levels, isSRGB ? GL_SRGB8_ALPHA8 : GL_RGBA8, dim_.x, dim_.y);
   glTextureSubImage2D(
     rendererID_,
     0,              // mip level 0
@@ -49,7 +53,10 @@ Texture2D::Texture2D(std::string_view path, bool isSRGB)
   stbi_image_free(pixels);
 
   // use OpenGL to generate mipmaps for us
-  glGenerateTextureMipmap(rendererID_);
+  if (genMips)
+  {
+    glGenerateTextureMipmap(rendererID_);
+  }
 }
 
 Texture2D& Texture2D::operator=(Texture2D&& rhs) noexcept
