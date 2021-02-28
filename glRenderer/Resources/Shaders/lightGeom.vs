@@ -1,13 +1,5 @@
 #version 460 core
 
-layout (location = 0) in vec3 aPos;
-
-//layout (location = 0) uniform mat4 u_model;
-layout (location = 1) uniform mat4 u_viewProj;
-
-layout (location = 0) out vec3 vLightPos;
-layout (location = 1) out flat int vInstanceID;
-
 struct PointLight
 {
   vec4 diffuse;
@@ -25,11 +17,15 @@ layout (std430, binding = 0) readonly buffer lit
   PointLight lights[];
 };
 
+layout (location = 0) in vec3 aPos;
+
+layout (location = 1) uniform mat4 u_viewProj;
+
+layout (location = 0) out flat PointLight vLight;
+
 void main()
 {
-  vInstanceID = gl_InstanceID;
-  vLightPos = aPos * sqrt(lights[vInstanceID].radiusSquared) + lights[vInstanceID].position.xyz;
-  vec4 clip = u_viewProj * vec4(vLightPos, 1.0);
-  //vTexCoord = (clip.xy + 1.0) / 2.0;
-  gl_Position = clip;
+  vLight = lights[gl_InstanceID];
+  vec3 vPos = aPos * sqrt(vLight.radiusSquared) + vLight.position.xyz;
+  gl_Position = u_viewProj * vec4(vPos, 1.0);
 }

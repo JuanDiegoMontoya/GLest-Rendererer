@@ -114,7 +114,9 @@ void Input::mouse_pos_cb([[maybe_unused]] GLFWwindow* window, double xpos, doubl
   {
     screenOffset.x = static_cast<float>(xpos);
     screenOffset.y = static_cast<float>(ypos);
+    prevScreenPos = screenOffset;
     firstMouse = false;
+    return;
   }
 
   screenPos.x = static_cast<float>(xpos);

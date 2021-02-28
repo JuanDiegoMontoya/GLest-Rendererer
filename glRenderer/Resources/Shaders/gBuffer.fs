@@ -37,7 +37,7 @@ void main()
     discard;
   }
   //vec3 normal = vTBN[2];
-  vec3 normal = vNormal;
+  vec3 normal = normalize(vNormal);
   if (u_object.hasNormal)
   {
     //if (normal == vec3(0.0)) // disables normal mapping

@@ -8,5 +8,6 @@ layout (location = 0) out vec4 fragColor;
 
 void main()
 {
-  fragColor = vec4(texture(u_texture, vTexCoord).rgb, 1.0);
+  vec3 color = texture(u_texture, vTexCoord).rgb;
+  fragColor = vec4(color.rgb, 1.0);
 }

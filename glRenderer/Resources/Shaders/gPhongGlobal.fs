@@ -8,15 +8,6 @@
 #define SHADOW_METHOD_ESM 2
 #define SHADOW_METHOD_MSM 3
 
-struct DirLight
-{
-  vec3 ambient;
-  vec3 diffuse;
-  vec3 specular;
-
-  vec3 direction;
-};
-
 layout (location = 0) in vec2 vTexCoord;
 
 layout (location = 0, binding = 0) uniform sampler2D gNormal;
@@ -31,7 +22,10 @@ layout (location = 8) uniform mat4 u_invViewProj;
 layout (location = 9) uniform float u_lightBleedFix = .9;
 layout (location = 10) uniform int u_shadowMethod = SHADOW_METHOD_ESM;
 layout (location = 11) uniform float u_C;
-layout (location = 12) uniform DirLight u_globalLight;
+layout (location = 12) uniform vec3 u_globalLight_ambient;
+layout (location = 13) uniform vec3 u_globalLight_diffuse;
+layout (location = 14) uniform vec3 u_globalLight_specular;
+layout (location = 15) uniform vec3 u_globalLight_direction;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -43,7 +37,7 @@ vec3 ShadowTexCoord(vec4 lightSpacePos)
   return projCoords.xyz;
 }
 
-const float u_minVariance = .000001; // for numeric precision
+const float u_minVariance = .000001; // compensate for numeric precision
 float linstep(float min, float max, float v)
 {
   return clamp((v - min) / (max - min), 0.0, 1.0);
@@ -99,8 +93,9 @@ float Shadow(vec4 lightSpacePos)
 void main()
 {
   vec2 texSize = textureSize(gNormal, 0);
-  vec3 albedo = texture(gAlbedoSpec, vTexCoord).rgb;
-  float specular = texture(gAlbedoSpec, vTexCoord).a;
+  vec4 albedoSpec = texture(gAlbedoSpec, vTexCoord).rgba;
+  vec3 albedo = albedoSpec.rgb;
+  float specular = albedoSpec.a;
   vec3 vPos = WorldPosFromDepth(texture(gDepth, vTexCoord).r, texSize, u_invViewProj);
   vec3 vNormal = oct_to_float32x3(texture(gNormal, vTexCoord).xy);
   //vec3 vNormal = texture(gNormal, vTexCoord).xyz;
@@ -113,7 +108,7 @@ void main()
   }
 
   vec3 viewDir = normalize(u_viewPos - vPos);
-  vec3 lightDir = normalize(-u_globalLight.direction);
+  vec3 lightDir = normalize(-u_globalLight_direction);
 
   float diff = max(dot(vNormal, lightDir), 0.0);
   
@@ -121,9 +116,9 @@ void main()
   vec3 reflectDir = reflect(-lightDir, vNormal);
   spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess) * SPECULAR_STRENGTH;
   
-  vec3 ambient = u_globalLight.ambient * albedo;
-  vec3 diffuse = u_globalLight.diffuse * diff * albedo;
-  vec3 specu = u_globalLight.specular * spec * specular;
+  vec3 ambient = u_globalLight_ambient * albedo;
+  vec3 diffuse = u_globalLight_diffuse * diff * albedo;
+  vec3 specu = u_globalLight_specular * spec * specular;
 
   float shadow = 0.0;
   if (diff > 0.0) // only shadow light-facing pixels

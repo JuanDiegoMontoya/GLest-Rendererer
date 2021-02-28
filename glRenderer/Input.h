@@ -59,10 +59,10 @@ public:
   static void SetCursorVisible(bool state);
 
 private:
-  static inline glm::vec2 screenPos;
-  static inline glm::vec2 screenOffset;
-  static inline glm::vec2 prevScreenPos;
-  static inline glm::vec2 scrollOffset;
+  static inline glm::vec2 screenPos{};
+  static inline glm::vec2 screenOffset{};
+  static inline glm::vec2 prevScreenPos{};
+  static inline glm::vec2 scrollOffset{};
 
   static void keypress_cb(GLFWwindow* window, int key, int scancode, int action, int mods);
   static void mouse_pos_cb(GLFWwindow* window, double xpos, double ypos);

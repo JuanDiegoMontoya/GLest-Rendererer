@@ -15,13 +15,7 @@ struct PointLight
   float _padding;
 };
 
-layout (std430, binding = 0) readonly buffer lit
-{
-  PointLight lights[];
-};
-
-layout (location = 0) in vec3 vLightPos;
-layout (location = 1) in flat int vInstanceID;
+layout (location = 0) in flat PointLight vLight;
 
 layout (location = 2) uniform sampler2D gNormal;
 layout (location = 3) uniform sampler2D gAlbedoSpec;
@@ -52,17 +46,8 @@ void main()
   vec3 vNormal = oct_to_float32x3(texture(gNormal, texCoord).xy);
   //vec3 vNormal = texture(gNormal, texCoord).xyz;
 
-  float distanceToLightSquared = dot(vPos - lights[vInstanceID].position.xyz, vPos - lights[vInstanceID].position.xyz);
-  if (vNormal == vec3(0) || distanceToLightSquared > lights[vInstanceID].radiusSquared)
-  {
-    fragColor = vec4(0);
-    return;
-  }
-
-  vec3 pixelPos = WorldPosFromDepth(0.0, texSize, u_invViewProj);
-  float pixelDistanceToLightSquared = dot(pixelPos - lights[vInstanceID].position.xyz, pixelPos - lights[vInstanceID].position.xyz);
-  if ((gl_FrontFacing == true && pixelDistanceToLightSquared < lights[vInstanceID].radiusSquared) || 
-    gl_FrontFacing == false && pixelDistanceToLightSquared >= lights[vInstanceID].radiusSquared)
+  float distanceToLightSquared = dot(vPos - vLight.position.xyz, vPos - vLight.position.xyz);
+  if (vNormal == vec3(0) || distanceToLightSquared > vLight.radiusSquared)
   {
     fragColor = vec4(0);
     return;
@@ -70,10 +55,10 @@ void main()
 
   vec3 normal = normalize(vNormal);
   vec3 viewDir = normalize(u_viewPos - vPos);
-  vec3 local = CalcPointLight(lights[vInstanceID], normal, viewDir);
+  vec3 local = CalcPointLight(vLight, normal, viewDir);
 
-  fragColor = vec4(local, 0.0) * smoothstep((lights[vInstanceID].radiusSquared), .4 * (lights[vInstanceID].radiusSquared), (distanceToLightSquared));
-  //fragColor = vec4(clamp(mix(local, vec3(0.0), distanceToLightSquared / lights[vInstanceID].radiusSquared), 0.0, 1.0), 0.0);
+  fragColor = vec4(local, 0.0) * smoothstep((vLight.radiusSquared), .4 * (vLight.radiusSquared), (distanceToLightSquared));
+  //fragColor = vec4(clamp(mix(local, vec3(0.0), distanceToLightSquared / vLight.radiusSquared), 0.0, 1.0), 0.0);
   //fragColor = vec4(local, 0.0);
 }
 

@@ -92,7 +92,13 @@ void Renderer::MainLoop()
 
   CreateScene();
 
-  Input::SetCursorVisible(false);
+  cam.SetPos({ 59.4801331f, 5.45370150f, -6.37605810f });
+  cam.SetPitch(-2.98514581f);
+  cam.SetYaw(175.706055f);
+  cam.Update(0);
+
+  Input::SetCursorVisible(cursorVisible);
+
   Timer timer;
   float accum = 0;
   while (!glfwWindowShouldClose(window))
@@ -238,14 +244,21 @@ void Renderer::MainLoop()
         gBufferShader->SetMat3("u_normalMatrix", obj.GetNormalMatrix());
         for (const auto& mesh : obj.meshes)
         {
-          gBufferShader->SetBool("u_object.hasSpecular", mesh->GetMaterial().hasSpecular);
-          gBufferShader->SetBool("u_object.hasAlpha", mesh->GetMaterial().hasAlpha);
+          const auto& mat = mesh->GetMaterial();
+          gBufferShader->SetBool("u_object.hasSpecular", mat.hasSpecular);
+          gBufferShader->SetBool("u_object.hasAlpha", mat.hasAlpha);
           //gBufferShader->SetBool("u_object.hasNormal", mesh->GetMaterial().hasNormal);
-          gBufferShader->SetFloat("u_object.shininess", mesh->GetMaterial().shininess);
-          glBindTextureUnit(0, mesh->GetMaterial().diffuseTex->GetID());
-          glBindTextureUnit(1, mesh->GetMaterial().alphaMaskTex->GetID());
-          glBindTextureUnit(2, mesh->GetMaterial().specularTex->GetID());
-          glBindTextureUnit(3, mesh->GetMaterial().normalTex->GetID());
+          gBufferShader->SetFloat("u_object.shininess", mat.shininess);
+          glBindTextureUnit(0, mat.diffuseTex->GetID());
+          if (mat.hasAlpha)
+          {
+            glBindTextureUnit(1, mat.alphaMaskTex->GetID());
+          }
+          if (mat.hasSpecular)
+          {
+            glBindTextureUnit(2, mat.specularTex->GetID());
+          }
+          //glBindTextureUnit(3, mat.normalTex->GetID());
           glVertexArrayVertexBuffer(vao, 0, mesh->GetVBOID(), 0, sizeof(Vertex));
           glVertexArrayElementBuffer(vao, mesh->GetEBOID());
           glDrawElements(GL_TRIANGLES, mesh->GetVertexCount(), GL_UNSIGNED_INT, nullptr);
@@ -271,10 +284,10 @@ void Renderer::MainLoop()
       gPhongGlobal->SetFloat("u_C", eConstant);
       gPhongGlobal->SetVec3("u_viewPos", cam.GetPos());
       gPhongGlobal->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
-      gPhongGlobal->SetVec3("u_globalLight.ambient", globalLight.ambient);
-      gPhongGlobal->SetVec3("u_globalLight.diffuse", globalLight.diffuse);
-      gPhongGlobal->SetVec3("u_globalLight.specular", globalLight.specular);
-      gPhongGlobal->SetVec3("u_globalLight.direction", globalLight.direction);
+      gPhongGlobal->SetVec3("u_globalLight_ambient", globalLight.ambient);
+      gPhongGlobal->SetVec3("u_globalLight_diffuse", globalLight.diffuse);
+      gPhongGlobal->SetVec3("u_globalLight_specular", globalLight.specular);
+      gPhongGlobal->SetVec3("u_globalLight_direction", globalLight.direction);
       gPhongGlobal->SetMat4("u_lightMatrix", lightMat);
       gPhongGlobal->SetFloat("u_lightBleedFix", vlightBleedFix);
       glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -282,14 +295,11 @@ void Renderer::MainLoop()
 
     // local lights pass
     {
-      glEnable(GL_DEPTH_TEST);
       glEnable(GL_BLEND);
       glBlendFunc(GL_ONE, GL_ONE);
-      glDisable(GL_CULL_FACE);
-      glDepthMask(GL_FALSE);
-      //glEnable(GL_CULL_FACE);
-      //glCullFace(GL_BACK);
-      //glFrontFace(GL_CCW);
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_FRONT);
+      //glDepthMask(GL_FALSE);
       auto& gPhongLocal = Shader::shaders["gPhongManyLocal"];
       gPhongLocal->Bind();
       gPhongLocal->SetMat4("u_viewProj", cam.GetViewProj());
@@ -304,6 +314,7 @@ void Renderer::MainLoop()
       glVertexArrayVertexBuffer(vao, 0, sphere.GetVBOID(), 0, sizeof(Vertex));
       glVertexArrayElementBuffer(vao, sphere.GetEBOID());
       glDrawElementsInstanced(GL_TRIANGLES, sphere.GetVertexCount(), GL_UNSIGNED_INT, nullptr, localLights.size());
+      glCullFace(GL_BACK);
     }
 
     // volumetric/crepuscular/god rays pass (write to volumetrics texture)
@@ -446,7 +457,7 @@ void Renderer::MainLoop()
     }
     if (Input::IsKeyDown(GLFW_KEY_5))
     {
-      drawFSTexture(vshadowDepthGoodFormat);
+      drawFSTexture(shadowDepth);
     }
     if (Input::IsKeyDown(GLFW_KEY_6))
     {
@@ -462,7 +473,11 @@ void Renderer::MainLoop()
     }
     if (Input::IsKeyDown(GLFW_KEY_9))
     {
-      drawFSTexture(eShadowDepthBlur);
+      drawFSTexture(eExpShadowDepth);
+    }
+    if (Input::IsKeyDown(GLFW_KEY_0))
+    {
+      drawFSTexture(vshadowDepthGoodFormat);
     }
     if (Input::IsKeyPressed(GLFW_KEY_C))
     {
@@ -489,6 +504,12 @@ void Renderer::MainLoop()
         {
           { "gBuffer.vs", GL_VERTEX_SHADER },
           { "gBuffer.fs", GL_FRAGMENT_SHADER }
+        }));
+      Shader::shaders.erase("fstexture");
+      Shader::shaders["fstexture"].emplace(Shader(
+        {
+          { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+          { "texture.fs", GL_FRAGMENT_SHADER }
         }));
     }
 
@@ -603,7 +624,7 @@ void Renderer::CreateFramebuffers()
   glTextureParameterfv(vshadowDepthGoodFormat, GL_TEXTURE_BORDER_COLOR, txzeros);
   glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
   glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-  glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MIN_FILTER, shadow_gen_mips ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
   glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTextureParameterf(vshadowDepthGoodFormat, GL_TEXTURE_MAX_ANISOTROPY, deviceAnisotropy);
   glCreateFramebuffers(1, &vshadowGoodFormatFbo);
@@ -622,7 +643,7 @@ void Renderer::CreateFramebuffers()
   glTextureParameterfv(eExpShadowDepth, GL_TEXTURE_BORDER_COLOR, txzeros);
   glTextureParameteri(eExpShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
   glTextureParameteri(eExpShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-  glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, shadow_gen_mips ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
   glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTextureParameterf(eExpShadowDepth, GL_TEXTURE_MAX_ANISOTROPY, deviceAnisotropy);
   glCreateFramebuffers(1, &eShadowFbo);
@@ -700,20 +721,7 @@ void Renderer::CreateScene()
   globalLight.direction = glm::normalize(glm::vec3(1, -.5, 0));
   globalLight.specular = glm::vec3(.125f);
 
-  int numLights = 1000;
-  for (int x = 0; x < numLights; x++)
-  {
-    PointLight light;
-    light.diffuse = glm::vec4(glm::vec3(rng(0, 1), rng(0, 1), rng(0, 1)), 0.f);
-    light.specular = light.diffuse;
-    light.position = glm::vec4(glm::vec3(rng(-70, 70), rng(.1f, .6f), rng(-30, 30)), 0.f);
-    light.linear = rng(2, 8);
-    light.quadratic = 0;// rng(5, 12);
-    light.radiusSquared = light.CalcRadiusSquared(.010f);
-    localLights.push_back(light);
-  }
-  glCreateBuffers(1, &lightSSBO);
-  glNamedBufferStorage(lightSSBO, localLights.size() * sizeof(PointLight), localLights.data(), GL_DYNAMIC_STORAGE_BIT);
+  CreateLocalLights();
 
   // setup geometry
   terrainMeshes = LoadObj("Resources/Models/sponza/sponza.obj");
@@ -817,6 +825,11 @@ void Renderer::DrawUI()
     ImGui::ColorEdit3("Diffuse", &globalLight.diffuse[0]);
     ImGui::ColorEdit3("Ambient", &globalLight.ambient[0]);
     ImGui::ColorEdit3("Specular", &globalLight.specular[0]);
+    ImGui::SliderInt("Local lights", &numLights, 0, 40000);
+    if (ImGui::Button("Update local lights"))
+    {
+      CreateLocalLights();
+    }
     ImGui::End();
   }
 
@@ -919,4 +932,27 @@ void Renderer::ApplyTonemapping(float dt)
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
   glDisable(GL_FRAMEBUFFER_SRGB);
+}
+
+void Renderer::CreateLocalLights()
+{
+  if (lightSSBO)
+  {
+    glDeleteBuffers(1, &lightSSBO);
+  }
+
+  localLights.clear();
+  for (int x = 0; x < numLights; x++)
+  {
+    PointLight light;
+    light.diffuse = glm::vec4(glm::vec3(rng(0, 1), rng(0, 1), rng(0, 1)), 0.f);
+    light.specular = light.diffuse;
+    light.position = glm::vec4(glm::vec3(rng(-70, 70), rng(.1f, .6f), rng(-30, 30)), 0.f);
+    light.linear = rng(2, 8);
+    light.quadratic = 0;// rng(5, 12);
+    light.radiusSquared = light.CalcRadiusSquared(.010f);
+    localLights.push_back(light);
+  }
+  glCreateBuffers(1, &lightSSBO);
+  glNamedBufferStorage(lightSSBO, glm::max(size_t(1), localLights.size() * sizeof(PointLight)), localLights.data(), 0);
 }

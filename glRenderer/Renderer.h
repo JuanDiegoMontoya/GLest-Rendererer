@@ -33,13 +33,14 @@ private:
   void CreateVAO();
   void DrawUI();
   void ApplyTonemapping(float dt);
+  void CreateLocalLights();
 
   // common
   GLFWwindow* window{};
   const uint32_t WIDTH = 1440;
   const uint32_t HEIGHT = 810;
   GLuint vao{};
-  bool cursorVisible = false;
+  bool cursorVisible = true;
   float deviceAnisotropy{ 0.0f };
 
   // scene info
@@ -51,6 +52,7 @@ private:
   GLuint lightSSBO{};
   float sunPosition = 0;
   DirLight globalLight;
+  int numLights = 1000;
 
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex{};
