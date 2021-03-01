@@ -16,7 +16,6 @@ layout (location = 9) uniform float thickness;
 layout (location = 10) uniform float searchDist;
 layout (location = 11) uniform int maxSteps;
 layout (location = 12) uniform int binarySearchSteps;
-layout (location = 13, binding = 4) uniform sampler2D u_blueNoise;
 layout (location = 14) uniform ivec2 u_viewportSize;
 
 layout (location = 0) out vec4 fragColor;
@@ -49,7 +48,7 @@ vec4 Raycast(vec3 dir, inout vec3 hit, out float dDepth)
 {
   dir *= rayStep;
   
-  hit += dir * texelFetch(u_blueNoise, ivec2(mod(ivec2(gl_FragCoord.xy), textureSize(u_blueNoise, 0))), 0).x;
+  //hit += dir * texelFetch(u_blueNoise, ivec2(mod(ivec2(gl_FragCoord.xy), textureSize(u_blueNoise, 0))), 0).x;
 
   for (int i = 0; i < maxSteps; i++)
   {

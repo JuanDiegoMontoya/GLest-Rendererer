@@ -6,7 +6,6 @@
 #include "Shader.h"
 #include "Input.h"
 #include "Utilities.h"
-#include "RendererHelpers.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -180,11 +179,11 @@ void Renderer::MainLoop()
     {
     case SHADOW_METHOD_VSM: filteredTex = vshadowDepthGoodFormat; break;
     case SHADOW_METHOD_ESM: filteredTex = eExpShadowDepth; break;
-    case SHADOW_METHOD_MSM: /* TODO: fill */break;
+    case SHADOW_METHOD_MSM: filteredTex = msmShadowMoments; break;
     }
 
     // copy transformed shadow depth to another texture
-    if (shadow_method == SHADOW_METHOD_ESM || shadow_method == SHADOW_METHOD_VSM)
+    if (shadow_method == SHADOW_METHOD_ESM || shadow_method == SHADOW_METHOD_VSM || shadow_method == SHADOW_METHOD_MSM)
     {
       glBindTextureUnit(0, shadowDepth);
 
@@ -194,7 +193,7 @@ void Renderer::MainLoop()
       {
       case SHADOW_METHOD_VSM: shaderName = "vsm_copy"; fbo = vshadowGoodFormatFbo; break;
       case SHADOW_METHOD_ESM: shaderName = "esm_copy"; fbo = eShadowFbo; break;
-      case SHADOW_METHOD_MSM: shaderName = "msm_copy"; /* TODO: fill */break;
+      case SHADOW_METHOD_MSM: shaderName = "msm_copy"; fbo = msmShadowFbo; break;
       }
 
       auto& copyShader = Shader::shaders[shaderName];
@@ -207,15 +206,15 @@ void Renderer::MainLoop()
       glDrawArrays(GL_TRIANGLES, 0, 3);
       if (shadow_method == SHADOW_METHOD_VSM)
       {
-        blurTexture32rgf(vshadowDepthGoodFormat, vshadowMomentBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
+        blurTextureRG32f(vshadowDepthGoodFormat, vshadowMomentBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
       }
       else if (shadow_method == SHADOW_METHOD_ESM)
       {
-        blurTexture32rf(eExpShadowDepth, eShadowDepthBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
+        blurTextureR32f(eExpShadowDepth, eShadowDepthBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
       }
       else if (shadow_method == SHADOW_METHOD_MSM)
       {
-        // do some blur thing
+        blurTextureRGBA32f(msmShadowMoments, msmShadowMomentsBlur, SHADOW_WIDTH, SHADOW_HEIGHT, BLUR_PASSES, BLUR_STRENGTH);
       }
 
       if (shadow_gen_mips)
@@ -390,12 +389,6 @@ void Renderer::MainLoop()
       glBindTextureUnit(1, gDepth);
       glBindTextureUnit(2, gShininess);
       glBindTextureUnit(3, gNormal);
-      glBindTextureUnit(4, bluenoiseTex->GetID());
-      ssrShader->SetInt("gColor", 0);
-      ssrShader->SetInt("gDepth", 1);
-      ssrShader->SetInt("gShininess", 2);
-      ssrShader->SetInt("gNormal", 3);
-      ssrShader->SetInt("u_blueNoise", 4);
       ssrShader->SetMat4("u_proj", cam.GetProj());
       ssrShader->SetMat4("u_view", cam.GetView());
       ssrShader->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
@@ -418,16 +411,16 @@ void Renderer::MainLoop()
       auto& fsshader = Shader::shaders["fstexture"];
       fsshader->Bind();
       fsshader->SetInt("u_texture", 0);
+      glBindTextureUnit(0, hdrColor);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
       if (volumetric_enabled)
       {
         if (atrousPasses % 2 == 0)
-          glBindTextureUnit(0, volumetricsTex); // uncomment for 0 or 2 pass a-trous
+          glBindTextureUnit(0, volumetricsTex); // 0 or 2 pass a-trous
         else
-          glBindTextureUnit(0, atrousTex); // uncomment for 1 pass a-trous
+          glBindTextureUnit(0, atrousTex); // 1 pass a-trous
         glDrawArrays(GL_TRIANGLES, 0, 3);
       }
-      glBindTextureUnit(0, hdrColor);
-      glDrawArrays(GL_TRIANGLES, 0, 3);
       if (ssr_enabled)
       {
         glBindTextureUnit(0, ssrTex);
@@ -473,7 +466,7 @@ void Renderer::MainLoop()
     }
     if (Input::IsKeyDown(GLFW_KEY_9))
     {
-      drawFSTexture(eExpShadowDepth);
+      drawFSTexture(msmShadowMoments);
     }
     if (Input::IsKeyDown(GLFW_KEY_0))
     {
@@ -607,8 +600,10 @@ void Renderer::CreateFramebuffers()
   const GLfloat txzeros[] = { 0, 0, 0, 0 };
   glCreateTextures(GL_TEXTURE_2D, 1, &shadowDepth);
   glTextureStorage2D(shadowDepth, 1, GL_DEPTH_COMPONENT32, SHADOW_WIDTH, SHADOW_HEIGHT);
+  glTextureParameterfv(shadowDepth, GL_TEXTURE_BORDER_COLOR, txzeros);
+  glTextureParameteri(shadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+  glTextureParameteri(shadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
   glCreateFramebuffers(1, &shadowFbo);
-  //glNamedFramebufferTexture(shadowFbo, GL_COLOR_ATTACHMENT0, shadowDepthSquared, 0);
   glNamedFramebufferTexture(shadowFbo, GL_DEPTH_ATTACHMENT, shadowDepth, 0);
   glNamedFramebufferDrawBuffer(shadowFbo, GL_NONE);
   if (GLenum status = glCheckNamedFramebufferStatus(shadowFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
@@ -652,6 +647,25 @@ void Renderer::CreateFramebuffers()
   if (GLenum status = glCheckNamedFramebufferStatus(eShadowFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
   {
     throw std::runtime_error("Failed to create ESM framebuffer");
+  }
+
+  // MSM textures + fbo
+  glCreateTextures(GL_TEXTURE_2D, 1, &msmShadowMoments);
+  glCreateTextures(GL_TEXTURE_2D, 1, &msmShadowMomentsBlur);
+  glTextureStorage2D(msmShadowMoments, SHADOW_LEVELS, GL_RGBA32F, SHADOW_WIDTH, SHADOW_HEIGHT);
+  glTextureStorage2D(msmShadowMomentsBlur, 1, GL_RGBA32F, SHADOW_WIDTH, SHADOW_HEIGHT);
+  glTextureParameterfv(msmShadowMoments, GL_TEXTURE_BORDER_COLOR, txzeros);
+  glTextureParameteri(msmShadowMoments, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+  glTextureParameteri(msmShadowMoments, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+  glTextureParameteri(msmShadowMoments, GL_TEXTURE_MIN_FILTER, shadow_gen_mips ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+  glTextureParameteri(msmShadowMoments, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTextureParameterf(msmShadowMoments, GL_TEXTURE_MAX_ANISOTROPY, deviceAnisotropy);
+  glCreateFramebuffers(1, &msmShadowFbo);
+  glNamedFramebufferTexture(msmShadowFbo, GL_COLOR_ATTACHMENT0, msmShadowMoments, 0);
+  glNamedFramebufferDrawBuffer(msmShadowFbo, GL_COLOR_ATTACHMENT0);
+  if (GLenum status = glCheckNamedFramebufferStatus(msmShadowFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+  {
+    throw std::runtime_error("Failed to create MSM framebuffer");
   }
 
   // create texture attachments for gBuffer FBO
@@ -920,7 +934,7 @@ void Renderer::ApplyTonemapping(float dt)
     glDispatchCompute(1, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
   }
-
+  
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glViewport(0, 0, WIDTH, HEIGHT);
   auto& shdr = Shader::shaders["tonemap"];

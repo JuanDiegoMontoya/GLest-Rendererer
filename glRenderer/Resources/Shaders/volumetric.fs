@@ -37,7 +37,8 @@ void main()
   const vec3 rayDir = normalize(rayEnd - rayStart);
   const float totalDistance = distance(rayStart, rayEnd);
   const float rayStep = totalDistance / NUM_STEPS;
-  vec3 rayPos = rayStart + rayDir * rayStep * texelFetch(u_blueNoise, ivec2(mod(ivec2(gl_FragCoord.xy), textureSize(u_blueNoise, 0))), 0).x * noiseOffset;
+  const vec2 noiseUV = gl_FragCoord.xy / textureSize(u_blueNoise, 0);
+  vec3 rayPos = rayStart + rayDir * rayStep * texture(u_blueNoise, noiseUV).x * noiseOffset;
   
   float accum = 0.0;
   for (int i = 0; i < NUM_STEPS; i++)

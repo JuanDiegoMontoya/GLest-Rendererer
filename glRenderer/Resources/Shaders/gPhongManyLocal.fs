@@ -38,8 +38,9 @@ void main()
 {
   vec2 texSize = textureSize(gNormal, 0);
   vec2 texCoord = gl_FragCoord.xy / texSize;
-  albedo = texture(gAlbedoSpec, texCoord).rgb;
-  specular = texture(gAlbedoSpec, texCoord).a;
+  vec4 albedoSpec = texture(gAlbedoSpec, texCoord).rgba;
+  albedo = albedoSpec.rgb;
+  specular = albedoSpec.a;
   //vPos = texture(gPosition, texCoord).xyz;
   vPos = WorldPosFromDepth(texture(gDepth, texCoord).r, texSize, u_invViewProj);
   shininess = texture(gShininess, texCoord).r;
@@ -70,7 +71,7 @@ vec3 CalcLocalColor(PointLight light, vec3 lightDir, vec3 normal, vec3 viewDir)
   vec3 reflectDir = reflect(-lightDir, normal);
   spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess) * SPECULAR_STRENGTH;
   
-  vec3 diffuse  = (light.diffuse.xyz)  * diff * albedo;
+  vec3 diffuse = (light.diffuse.xyz)  * diff * albedo;
   vec3 specu = light.specular.xyz * spec * specular;
   return (diffuse + specu);
 }

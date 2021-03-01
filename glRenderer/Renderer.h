@@ -2,6 +2,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "RendererHelpers.h"
 #include "Mesh.h"
 #include "Object.h"
 #include "Light.h"
@@ -121,6 +122,10 @@ private:
   // exponential shadow stuff
   GLuint eShadowFbo{}, eExpShadowDepth{}, eShadowDepthBlur{};
   float eConstant{ 80.0f };
+
+  // moment shadow stuff
+  GLuint msmShadowFbo{}, msmShadowMoments{}, msmShadowMomentsBlur{};
+  float msmA = 3e-5f; // unused
 
   // HDR stuff
   GLuint hdrfbo{}, hdrColor{}, hdrDepth{};

@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+#include <span>
 
 void GLAPIENTRY
 GLerrorCB(GLenum source,
@@ -12,7 +14,20 @@ GLerrorCB(GLenum source,
 void CompileShaders();
 void drawFSTexture(GLuint texID);
 
-void blurTexture32rgf(GLuint inOutTex, GLuint intermediateTexture, 
+void blurTextureBase(GLuint inOutTex, GLuint intermediateTexture,
+  GLint width, GLint height, GLint passes, GLint strength, std::span<std::string> shaderNames, GLenum imageFormat);
+void blurTextureRG32f(GLuint inOutTex, GLuint intermediateTexture, 
   GLint width, GLint height, GLint passes, GLint strength);
-void blurTexture32rf(GLuint inOutTex, GLuint intermediateTexture,
+void blurTextureR32f(GLuint inOutTex, GLuint intermediateTexture,
   GLint width, GLint height, GLint passes, GLint strength);
+void blurTextureRGBA32f(GLuint inOutTex, GLuint intermediateTexture,
+  GLint width, GLint height, GLint passes, GLint strength);
+
+struct DrawElementsIndirectCommand
+{
+  GLuint count;
+  GLuint primCount;
+  GLuint firstIndex;
+  GLuint baseVertex;
+  GLuint baseInstance;
+};
