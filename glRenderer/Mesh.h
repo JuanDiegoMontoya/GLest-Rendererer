@@ -24,10 +24,8 @@ struct Vertex
 struct Material
 {
   Texture2D* diffuseTex{};
-  Texture2D* alphaMaskTex{};
   Texture2D* specularTex{};
   Texture2D* normalTex{};
-  bool hasAlpha{};
   bool hasSpecular{};
   bool hasNormal{};
   float shininess{};

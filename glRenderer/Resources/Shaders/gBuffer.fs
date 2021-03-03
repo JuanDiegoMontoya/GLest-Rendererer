@@ -6,11 +6,9 @@
 struct Material
 {
   sampler2D diffuse;
-  sampler2D alpha;
   sampler2D specular;
   sampler2D normal;
   bool hasSpecular;
-  bool hasAlpha;
   bool hasNormal;
   float shininess;
 };
@@ -32,10 +30,6 @@ layout (location = 3) uniform Material u_object;
 
 void main()
 {
-  if (u_object.hasAlpha && texture(u_object.alpha, vTexCoord).r == 0.0)
-  {
-    discard;
-  }
   //vec3 normal = vTBN[2];
   vec3 normal = normalize(vNormal);
   if (u_object.hasNormal)
@@ -59,7 +53,12 @@ void main()
   //gNormal = float32x3_to_oct(normalize(normal) * .5 + .5);
   gNormal.xyz = (normalize(normal) * .5 + .5);
 #endif
-  gAlbedoSpec.rgb = texture(u_object.diffuse, vTexCoord).rgb;
+  vec4 color = texture(u_object.diffuse, vTexCoord).rgba;
+  if (color.a <= .01)
+  {
+    discard;
+  }
+  gAlbedoSpec.rgb = color.rgb;
   gAlbedoSpec.a = 0.0;
   if (u_object.hasSpecular)
   {

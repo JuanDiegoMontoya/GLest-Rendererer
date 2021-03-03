@@ -148,6 +148,16 @@ public:
     assert(Uniforms.find(uniform) != Uniforms.end());
     glProgramUniformMatrix4fv(programID, Uniforms[uniform], 1, GL_FALSE, glm::value_ptr(mat));
   }
+  void SetHandle(std::string uniform, const uint64_t handle)
+  {
+    assert(Uniforms.find(uniform) != Uniforms.end());
+    glProgramUniformHandleui64ARB(programID, Uniforms[uniform], handle);
+  }
+  void SetHandleArray(std::string uniform, std::span<const uint64_t> handles)
+  {
+    assert(Uniforms.find(uniform) != Uniforms.end());
+    glProgramUniformHandleui64vARB(programID, Uniforms[uniform], handles.size(), handles.data());
+  }
 
   // list of all shader programs
   static inline std::unordered_map<std::string, std::optional<Shader>> shaders;

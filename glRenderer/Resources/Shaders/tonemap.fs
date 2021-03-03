@@ -16,8 +16,6 @@ vec3 ACESFitted(vec3 color);
 
 void main()
 {
-  const float gamma = 2.2;
-  
   vec3 hdrColor = texture(u_hdrBuffer, vTexCoord).rgb;
   vec3 mapped = ACESFitted(hdrColor) * u_exposureFactor * readExposure;
   

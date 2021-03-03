@@ -233,9 +233,8 @@ void Renderer::MainLoop()
       gBufferShader->Bind();
       gBufferShader->SetMat4("u_viewProj", cam.GetViewProj());
       gBufferShader->SetInt("u_object.diffuse", 0);
-      gBufferShader->SetInt("u_object.alpha", 1);
-      gBufferShader->SetInt("u_object.specular", 2);
-      //gBufferShader->SetInt("u_object.normal", 3);
+      gBufferShader->SetInt("u_object.specular", 1);
+      //gBufferShader->SetInt("u_object.normal", 2);
 
       for (const auto& obj : objects)
       {
@@ -245,19 +244,14 @@ void Renderer::MainLoop()
         {
           const auto& mat = mesh->GetMaterial();
           gBufferShader->SetBool("u_object.hasSpecular", mat.hasSpecular);
-          gBufferShader->SetBool("u_object.hasAlpha", mat.hasAlpha);
           //gBufferShader->SetBool("u_object.hasNormal", mesh->GetMaterial().hasNormal);
           gBufferShader->SetFloat("u_object.shininess", mat.shininess);
           glBindTextureUnit(0, mat.diffuseTex->GetID());
-          if (mat.hasAlpha)
-          {
-            glBindTextureUnit(1, mat.alphaMaskTex->GetID());
-          }
           if (mat.hasSpecular)
           {
-            glBindTextureUnit(2, mat.specularTex->GetID());
+            glBindTextureUnit(1, mat.specularTex->GetID());
           }
-          //glBindTextureUnit(3, mat.normalTex->GetID());
+          //glBindTextureUnit(2, mat.normalTex->GetID());
           glVertexArrayVertexBuffer(vao, 0, mesh->GetVBOID(), 0, sizeof(Vertex));
           glVertexArrayElementBuffer(vao, mesh->GetEBOID());
           glDrawElements(GL_TRIANGLES, mesh->GetVertexCount(), GL_UNSIGNED_INT, nullptr);
@@ -897,6 +891,8 @@ void Renderer::ApplyTonemapping(float dt)
 
   const float logLowLum = glm::log(targetLuminance / maxExposure);
   const float logMaxLum = glm::log(targetLuminance / minExposure);
+  const int computePixelsX = WIDTH;
+  const int computePixelsY = HEIGHT;
 
   {
     auto& hshdr = Shader::shaders["generate_histogram"];
@@ -904,10 +900,10 @@ void Renderer::ApplyTonemapping(float dt)
     hshdr->SetInt("u_hdrBuffer", 1);
     hshdr->SetFloat("u_logLowLum", logLowLum);
     hshdr->SetFloat("u_logMaxLum", logMaxLum);
-    const int X_SIZE = 32;
-    const int Y_SIZE = 32;
-    int xgroups = (WIDTH + X_SIZE - 1) / X_SIZE;
-    int ygroups = (HEIGHT + Y_SIZE - 1) / Y_SIZE;
+    const int X_SIZE = 8;
+    const int Y_SIZE = 8;
+    int xgroups = (computePixelsX + X_SIZE - 1) / X_SIZE;
+    int ygroups = (computePixelsY + Y_SIZE - 1) / Y_SIZE;
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, histogramBuffer);
     glDispatchCompute(xgroups, ygroups, 1);
@@ -927,10 +923,10 @@ void Renderer::ApplyTonemapping(float dt)
     cshdr->Bind();
     cshdr->SetFloat("u_dt", dt);
     cshdr->SetFloat("u_adjustmentSpeed", adjustmentSpeed);
-    cshdr->SetInt("u_hdrBuffer", 1);
     cshdr->SetFloat("u_logLowLum", logLowLum);
     cshdr->SetFloat("u_logMaxLum", logMaxLum);
     cshdr->SetFloat("u_targetLuminance", targetLuminance);
+    cshdr->SetInt("u_numPixels", computePixelsX * computePixelsY);
     glDispatchCompute(1, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
   }

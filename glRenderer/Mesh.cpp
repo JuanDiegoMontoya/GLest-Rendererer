@@ -208,11 +208,9 @@ std::vector<Mesh> LoadObj(std::string path)
         {
           std::cout << "Creating material: " << prevName << std::endl;
           material.diffuseTex = new Texture2D(diffuseName, true, true);
-          material.alphaMaskTex = new Texture2D(maskName, false, true);
           material.specularTex = new Texture2D(specularName, true, true);
           material.normalTex = new Texture2D(normalName, false, true);
           material.hasSpecular = material.specularTex->Valid();
-          material.hasAlpha = material.alphaMaskTex->Valid();
           material.hasNormal = material.normalTex->Valid();
           material.shininess = shininess;
           materialMap[prevName] = material;
