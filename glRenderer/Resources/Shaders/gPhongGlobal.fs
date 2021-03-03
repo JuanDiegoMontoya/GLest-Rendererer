@@ -75,60 +75,6 @@ float ShadowESM(vec4 lightSpacePos)
   return clamp(shadowFacktor, 0.0, 1.0);
 }
 
-float compute_msm_shadow_intensity(vec4 b, float fragment_depth, float depthBias, float momentBias)
-{
-  // OpenGL 4 only - fma has higher precision:
-  // float l32_d22 = fma(-b.x, b.y, b.z); // a * b + c
-  // float d22 = fma(-b.x, b.x, b.y);     // a * b + c
-  // float squared_depth_variance = fma(-b.x, b.y, b.z); // a * b + c
-  b = mix(b, vec4(0.5), momentBias);
-  fragment_depth -= depthBias;
-
-  float l32_d22 = -b.x * b.y + b.z;
-  float d22 = -b.x *  b.x + b.y;
-  float squared_depth_variance = -b.x * b.y + b.z;
-  
-  float d33_d22 = dot(vec2(squared_depth_variance, -l32_d22), vec2(d22, l32_d22));
-  float inv_d22 = 1.0 - d22;
-  float l32 = l32_d22 * inv_d22;
-
-  float z_zero = fragment_depth;
-  vec3 c = vec3(1.0, z_zero - b.x, z_zero * z_zero);
-  c.z -= b.y + l32 * c.y;
-  c.y *= inv_d22;
-  c.z *= d22 / d33_d22;
-  c.y -= l32 * c.z;
-  c.x -= dot(c.yz, b.xy);
-  
-  float inv_c2 = 1.0 / c.z;
-  float p = c.y * inv_c2;
-  float q = c.x * inv_c2;
-  float r = sqrt((p * p * 0.25) - q);
-
-  float z_one = -p * 0.5 - r;
-  float z_two = -p * 0.5 + r;
-  
-  vec4 switch_msm;
-  if (z_two < z_zero)
-  {
-    switch_msm = vec4(z_one, z_zero, 1.0, 1.0);
-  }
-  else
-  {
-    if (z_one < z_zero)
-    {
-      switch_msm = vec4(z_zero, z_one, 0.0, 1.0);
-    }
-    else
-    {
-      switch_msm = vec4(0.0);
-    }
-  }
-  
-  float quotient = (switch_msm.x * z_two - b.x * (switch_msm.x + z_two + b.y)) / ((z_two - switch_msm.y) * (z_zero - z_one));
-  return 1.0 - clamp(switch_msm.y + switch_msm.z * quotient, 0.0, 1.0);
-}
-
 vec3 cholesky(float m11, float m12, float m13, float m22, float m23, float m33, float z1, float z2, float z3)
 {
   float a = sqrt(m11);
@@ -149,48 +95,69 @@ vec3 cholesky(float m11, float m12, float m13, float m22, float m23, float m33, 
   return vec3(c1, c2, c3);
 }
 
-vec2 findQuadraticRoots(float a, float b, float c)
+float getG(vec4 moments, float fragmentDepth, float depthBias, float momentBias)
 {
-  float discriminant = sqrt(b * b - 4 * a * c);
-  float r1 = (-b + discriminant) / (2 * a);
-  float r2 = (-b - discriminant) / (2 * a);
-  return vec2(r1, r2);
+  // Hamburger 4MSM.
+  vec4 b = moments * (1.0 - momentBias) + momentBias * vec4(0.5, 0.5, 0.5, 0.5);
+  vec3 z = vec3(fragmentDepth - depthBias, 0.0, 0.0);
+
+  float L32D22 = -b[0] * b[1] + b[2];
+  float D22    = -b[0] * b[0] + b[1];
+  float SDV    = -b[1] * b[1] + b[3];
+  float D33D22 = dot( vec2(SDV, -L32D22), vec2(D22, L32D22) );
+  float InvD22 = 1.0 / D22;
+  float L32    = L32D22 * InvD22;
+  
+  vec3 c = vec3(1.0f, z[0], z[0] * z[0]);
+  
+  c[1] -= b.x;
+  c[2] -= b.y + L32 * c[1];
+  
+  c[1] *= InvD22;
+  c[2] *= D22 / D33D22;
+  
+  c[1] -= L32 * c[2];
+  c[0] -= dot(c.yz, b.xy);
+  //vec3 c = cholesky(1.0, b.x, b.y, b.y, b.z, b.w, 1.0, z.x, z.x * z.x);
+  
+  // solve quadratic formula
+  float p = c[1] / c[2];
+  float q = c[0] / c[2];
+  float D = ((p * p) / 4.0) - q;
+  float r = sqrt(D);
+  z[1] = -(p / 2.0f) - r;
+  z[2] = -(p / 2.0f) + r;
+  
+  // swizzle
+  vec4 sv = vec4(0.0);
+  if (z[2] < z[0])
+  {
+    sv = vec4(z[1], z[0], 1.0, 1.0);
+  }
+  else if (z[1] < z[0])
+  {
+    sv = vec4(z[0], z[1], 0.0f, 1.0);
+  }
+  
+  float quotient = (sv[0] * z[2] - b[0] * (sv[0] + z[2]) + b[1]) / ((z[2] - sv[1]) * (z[0] - z[1]));
+                 
+  return 1.0 - clamp(sv[2] + sv[3] * quotient, 0.0, 1.0);
 }
 
 float msmBias = 3e-5;
 float ShadowMSM(vec4 lightSpacePos, float cosTheta)
 {
-  float depthBias = .005 * tan(acos(cosTheta)) ;
+  float depthBias = .005 * tan(acos(cosTheta));
   depthBias = clamp(depthBias, 0.0, 0.1);
-
   vec3 LightTexCoord = ShadowTexCoord(lightSpacePos);
   vec4 moments = texture(filteredShadow, LightTexCoord.xy).xyzw;
-
   mat4 magic = mat4(0.2227744146, 0.1549679261, 0.1451988946, 0.163127443,
                     0.0771972861, 0.1394629426, 0.2120202157, 0.2591432266,
                     0.7926986636, 0.7963415838, 0.7258694464, 0.6539092497,
                     0.0319417555,-0.1722823173,-0.2758014811,-0.3376131734);
   moments.x -= 0.035955884801;
   moments = magic * moments;
-  return compute_msm_shadow_intensity(moments, LightTexCoord.z, depthBias * 0.15, msmBias);
-  // float a = msmBias;
-  // float zf = LightTexCoord.z;
-  // vec4 b = moments;
-  // vec4 bPrime = (1.0 - a) * b + a * vec4(0.5);
-  // vec3 c = cholesky(1.0, b.x, b.y, b.y, b.z, b.w, 1, zf, zf * zf);
-  // vec2 roots = findQuadraticRoots(c.x, c.y, c.z);
-  // float z2 = roots.x;
-  // float z3 = roots.y;
-  // if (zf <= z2)
-  // {
-  //   return 0.0;
-  // }
-  // if (zf <= z3)
-  // {
-  //   return (zf * z3 - bPrime.x * (zf + z3) + bPrime.y) / ((z3 - z2) * (zf - z2));
-  // }
-
-  // return 1.0 - (z2 * z3 - bPrime.x * (z2 + z3) + bPrime.y) / ((zf - z2) * (zf - z3));
+  return getG(moments, LightTexCoord.z, depthBias * 0.15, msmBias);
 }
 
 float Shadow(vec4 lightSpacePos, float cosTheta)

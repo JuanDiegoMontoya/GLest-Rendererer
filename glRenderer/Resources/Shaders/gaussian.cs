@@ -22,7 +22,7 @@ const float weights[] = { 0.369521, 0.31524 }; // 3x3
 const float weights[] = { 1.0 }; // 1x1 (lol)
 #endif
 
-layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 void main()
 {
   const ivec2 texel = ivec2(gl_GlobalInvocationID.xy);

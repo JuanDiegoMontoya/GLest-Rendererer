@@ -124,6 +124,19 @@ void CompileShaders()
   Shader::shaders["gaussianRGBA32f_blur1"].emplace(Shader(
     { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 1"}, {"#define FORMAT RG32f", "#define FORMAT RGBA32f"}}} }));
 
+  Shader::shaders["gaussianRGBA16f_blur6"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 6"}, {"#define FORMAT RG32f", "#define FORMAT RGBA16f"}}} }));
+  Shader::shaders["gaussianRGBA16f_blur5"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 5"}, {"#define FORMAT RG32f", "#define FORMAT RGBA16f"}}} }));
+  Shader::shaders["gaussianRGBA16f_blur4"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 4"}, {"#define FORMAT RG32f", "#define FORMAT RGBA16f"}}} }));
+  Shader::shaders["gaussianRGBA16f_blur3"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 3"}, {"#define FORMAT RG32f", "#define FORMAT RGBA16f"}}} }));
+  Shader::shaders["gaussianRGBA16f_blur2"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 2"}, {"#define FORMAT RG32f", "#define FORMAT RGBA16f"}}} }));
+  Shader::shaders["gaussianRGBA16f_blur1"].emplace(Shader(
+    { { "gaussian.cs", GL_COMPUTE_SHADER, {{"#define KERNEL_RADIUS 3", "#define KERNEL_RADIUS 1"}, {"#define FORMAT RG32f", "#define FORMAT RGBA16f"}}} }));
+
   Shader::shaders["tonemap"].emplace(Shader(
     {
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
@@ -194,8 +207,8 @@ void blurTextureBase(GLuint inOutTex, GLuint intermediateTexture, GLint width, G
   shader->SetInt("u_inTex", 0);
   shader->SetInt("u_outTex", 0);
 
-  const int X_SIZE = 32;
-  const int Y_SIZE = 32;
+  const int X_SIZE = 8;
+  const int Y_SIZE = 8;
   const int xgroups = (width + X_SIZE - 1) / X_SIZE;
   const int ygroups = (height + Y_SIZE - 1) / Y_SIZE;
 
@@ -217,6 +230,12 @@ void blurTextureRGBA32f(GLuint inOutTex, GLuint intermediateTexture, GLint width
 {
   std::string strs[] = { "gaussianRGBA32f_blur1","gaussianRGBA32f_blur2", "gaussianRGBA32f_blur3", "gaussianRGBA32f_blur4", "gaussianRGBA32f_blur5", "gaussianRGBA32f_blur6" };
   blurTextureBase(inOutTex, intermediateTexture, width, height, passes, strength, strs, GL_RGBA32F);
+}
+
+void blurTextureRGBA16f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
+{
+  std::string strs[] = { "gaussianRGBA16f_blur1","gaussianRGBA16f_blur2", "gaussianRGBA16f_blur3", "gaussianRGBA16f_blur4", "gaussianRGBA16f_blur5", "gaussianRGBA16f_blur6" };
+  blurTextureBase(inOutTex, intermediateTexture, width, height, passes, strength, strs, GL_RGBA16F);
 }
 
 void blurTextureRG32f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)

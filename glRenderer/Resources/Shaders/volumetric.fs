@@ -29,7 +29,6 @@ float Shadow(vec4 lightSpacePos)
   return shadow;
 }
 
-
 void main()
 {
   const vec3 rayEnd = WorldPosFromDepth(texture(gDepth, vTexCoord).r, u_screenSize, u_invViewProj);
