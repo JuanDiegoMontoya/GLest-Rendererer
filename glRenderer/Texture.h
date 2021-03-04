@@ -13,11 +13,13 @@ public:
 
   void Bind(unsigned slot = 0) const;
   unsigned GetID() const { return rendererID_; }
+  uint64_t GetBindlessHandle() const { return bindlessHandle_; }
   bool Valid() const { return rendererID_ != 0; }
 
   glm::ivec2 GetDimensions() const { return dim_; }
 
 private:
-  unsigned rendererID_ = 0;
+  unsigned rendererID_{};
+  uint64_t bindlessHandle_{};
   glm::ivec2 dim_{};
 };

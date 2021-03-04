@@ -57,6 +57,9 @@ Texture2D::Texture2D(std::string_view path, bool isSRGB, bool genMips)
   {
     glGenerateTextureMipmap(rendererID_);
   }
+
+  bindlessHandle_ = glGetTextureHandleARB(rendererID_);
+  glMakeTextureHandleResidentARB(bindlessHandle_);
 }
 
 Texture2D& Texture2D::operator=(Texture2D&& rhs) noexcept

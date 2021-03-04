@@ -232,8 +232,8 @@ void Renderer::MainLoop()
       auto& gBufferShader = Shader::shaders["gBuffer"];
       gBufferShader->Bind();
       gBufferShader->SetMat4("u_viewProj", cam.GetViewProj());
-      gBufferShader->SetInt("u_object.diffuse", 0);
-      gBufferShader->SetInt("u_object.specular", 1);
+      //gBufferShader->SetInt("diffuse", 0);
+      //gBufferShader->SetInt("specular", 1);
       //gBufferShader->SetInt("u_object.normal", 2);
 
       for (const auto& obj : objects)
@@ -243,14 +243,16 @@ void Renderer::MainLoop()
         for (const auto& mesh : obj.meshes)
         {
           const auto& mat = mesh->GetMaterial();
-          gBufferShader->SetBool("u_object.hasSpecular", mat.hasSpecular);
+          gBufferShader->SetBool("hasSpecular", mat.hasSpecular);
           //gBufferShader->SetBool("u_object.hasNormal", mesh->GetMaterial().hasNormal);
-          gBufferShader->SetFloat("u_object.shininess", mat.shininess);
-          glBindTextureUnit(0, mat.diffuseTex->GetID());
+          gBufferShader->SetFloat("shininess", mat.shininess);
+          //glBindTextureUnit(0, mat.diffuseTex->GetID());
           if (mat.hasSpecular)
           {
-            glBindTextureUnit(1, mat.specularTex->GetID());
+            //glBindTextureUnit(1, mat.specularTex->GetID());
+            gBufferShader->SetHandle("specular", mat.specularTex->GetBindlessHandle());
           }
+          gBufferShader->SetHandle("diffuse", mat.diffuseTex->GetBindlessHandle());
           //glBindTextureUnit(2, mat.normalTex->GetID());
           glVertexArrayVertexBuffer(vao, 0, mesh->GetVBOID(), 0, sizeof(Vertex));
           glVertexArrayElementBuffer(vao, mesh->GetEBOID());
