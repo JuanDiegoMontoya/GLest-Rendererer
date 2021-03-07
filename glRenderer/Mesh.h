@@ -61,4 +61,21 @@ private:
   Material material{};
 };
 
+/// <summary>
+/// Batch/bindless rendering
+/// </summary>
+struct MeshInfo
+{
+
+};
+
+class BatchMesh
+{
+public:
+
+private:
+  MeshInfo* meshInfo_{};
+  Material* material_{};
+};
+
 std::vector<Mesh> LoadObj(std::string path);

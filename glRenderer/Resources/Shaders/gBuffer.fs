@@ -1,11 +1,12 @@
 #version 460 core
+#extension GL_ARB_bindless_texture : enable
 #include "common.h"
 
 #define VISUALIZE_MAPS 0
 
-layout (location = 3) uniform sampler2D diffuse;
-layout (location = 4) uniform sampler2D specular;
-layout (location = 5) uniform sampler2D normal;
+layout (location = 3, bindless_sampler) uniform sampler2D diffuse;
+layout (location = 4, bindless_sampler) uniform sampler2D specular;
+layout (location = 5, bindless_sampler) uniform sampler2D normal;
 layout (location = 6) uniform bool hasSpecular;
 layout (location = 7) uniform bool hasNormal;
 layout (location = 8) uniform float shininess;
@@ -18,7 +19,6 @@ layout (location = 0) in VS_OUT
   //mat3 TBN;
 };
 
-// render textures
 layout (location = 0) out vec4 gAlbedoSpec;
 layout (location = 1) out vec2 gNormal;
 layout (location = 2) out float gShininess;

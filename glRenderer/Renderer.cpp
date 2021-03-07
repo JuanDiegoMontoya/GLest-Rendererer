@@ -80,14 +80,14 @@ void Renderer::InitImGui()
 void Renderer::MainLoop()
 {
   bluenoiseTex = std::make_unique<Texture2D>("Resources/Textures/bluenoise_32.png", false, false);
+  vertexBuffer = std::make_unique<DynamicBuffer>(sizeof(Vertex) * max_vertices, sizeof(Vertex));
+  indexBuffer = std::make_unique<DynamicBuffer>(sizeof(uint32_t) * max_vertices, sizeof(uint32_t));
 
   CreateFramebuffers();
 
   CreateVAO();
 
   CompileShaders();
-
-  glClearColor(0, 0, 0, 0);
 
   CreateScene();
 
@@ -97,6 +97,8 @@ void Renderer::MainLoop()
   cam.Update(0);
 
   Input::SetCursorVisible(cursorVisible);
+
+  glClearColor(0, 0, 0, 0);
 
   Timer timer;
   float accum = 0;
@@ -728,7 +730,7 @@ void Renderer::CreateScene()
   // setup lighting
   globalLight.ambient = glm::vec3(.0225f);
   globalLight.diffuse = glm::vec3(.5f);
-  globalLight.direction = glm::normalize(glm::vec3(1, -.5, 0));
+  globalLight.direction = glm::normalize(glm::vec3(1, -.5f, 0));
   globalLight.specular = glm::vec3(.125f);
 
   CreateLocalLights();
@@ -738,8 +740,12 @@ void Renderer::CreateScene()
   sphere = std::move(LoadObj("Resources/Models/goodSphere.obj")[0]);
 
   Object terrain;
-  std::for_each(terrainMeshes.begin(), terrainMeshes.end(),
-    [&terrain](auto& mesh) { terrain.meshes.push_back(&mesh); });
+  //std::for_each(terrainMeshes.begin(), terrainMeshes.end(),
+  //  [&terrain](auto& mesh) { terrain.meshes.push_back(&mesh); });
+  for (auto& mesh : terrainMeshes)
+  {
+    terrain.meshes.push_back(&mesh);
+  }
   terrain.scale = glm::vec3(.05f);
   objects.push_back(terrain);
 

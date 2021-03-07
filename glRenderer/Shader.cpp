@@ -4,6 +4,8 @@
 #include <iostream>
 #include <regex>
 
+#define USE_SPIRV 0
+
 class IncludeHandler : public shaderc::CompileOptions::IncluderInterface
 {
 public:
@@ -54,7 +56,7 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
 
   shaderc::Compiler compiler;
   assert(compiler.IsValid());
-
+  
   shaderc::CompileOptions options;
   options.SetSourceLanguage(shaderc_source_language_glsl);
   options.SetTargetEnvironment(shaderc_target_env_opengl, 450);
@@ -66,6 +68,7 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
   std::vector<GLuint> shaderIDs;
   for (auto& [shaderPath, shaderType, replace] : shaders)
   {
+#if USE_SPIRV
     // preprocess shader
     auto compileResult = spvPreprocessAndCompile(compiler,
       options,
@@ -80,7 +83,6 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
         glDeleteShader(ID);
       break;
     }
-
     // "compile" (upload binary) shader
     GLuint shaderID = glCreateShader(shaderType);
     shaderIDs.push_back(shaderID);
@@ -90,7 +92,7 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
     // check if shader compilation succeeded
     GLint compileStatus = 0;
     glGetShaderiv(shaderID, GL_COMPILE_STATUS, &compileStatus);
-    if (compileStatus == GL_FALSE)
+    if (!compileStatus)
     {
       const int LOG_BUF_LEN = 512;
       GLint maxlen = 0;
@@ -101,12 +103,19 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
       printf("File: %s\n", shaderPath.c_str());
       printf("Error binary-ing shader of type %d\n%s\n", shaderType, infoLog);
     }
+#else
+    std::string preprocessedSource = preprocessShader(compiler, options, replace, shaderPath, gl2shadercTypes.at(shaderType));
+    GLuint shaderID = compileShader(shaderType, preprocessedSource, shaderPath);
+    shaderIDs.push_back(shaderID);
+#endif
   }
 
   programID = glCreateProgram();
 
   for (auto ID : shaderIDs)
+  {
     glAttachShader(programID, ID);
+  }
 
   glLinkProgram(programID);
 
@@ -124,13 +133,18 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
 
   std::vector<std::string_view> strs;
   for (const auto& [shaderPath, shaderType, replace] : shaders)
+  {
     strs.push_back(shaderPath);
+  }
   checkLinkStatus(strs);
 
   initUniforms();
 
   for (auto shaderID : shaderIDs)
+  {
     glDetachShader(programID, shaderID);
+    glDeleteShader(shaderID);
+  }
 }
 
 // loads a shader source into a string (string_view doesn't support concatenation)
@@ -153,7 +167,7 @@ std::string Shader::loadFile(std::string path)
 }
 
 // compiles a shader source and returns its ID
-GLint Shader::compileShader(shaderType type, const std::vector<std::string>& src, std::string_view path)
+GLuint Shader::compileShader(shaderType type, const std::string& src, std::string_view path)
 {
   GLuint shader = 0;
   GLchar infoLog[512];
@@ -161,13 +175,9 @@ GLint Shader::compileShader(shaderType type, const std::vector<std::string>& src
 
   shader = glCreateShader(type);
 
-  const GLchar** strings = new const GLchar*[src.size()];
-  for (int i = 0; i < src.size(); i++)
-  {
-    strings[i] = src[i].data();
-  }
+  const GLchar* strings = src.c_str();
 
-  glShaderSource(shader, static_cast<GLsizei>(src.size()), strings, NULL);
+  glShaderSource(shader, 1, &strings, NULL);
   glCompileShader(shader);
 
   glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
@@ -178,12 +188,7 @@ GLint Shader::compileShader(shaderType type, const std::vector<std::string>& src
     std::cout << "File: " << path << std::endl;
     std::cout << "Error compiling shader of type " << type << '\n' << infoLog << std::endl;
   }
-  else
-  {
-    // compile successful
-  }
 
-  delete[] strings;
   return shader;
 }
 
@@ -243,6 +248,22 @@ std::vector<uint32_t>
     std::string path,
     shaderc_shader_kind shaderType)
 {
+  std::string preprocessResult = preprocessShader(compiler, options, replace, path, shaderType);
+
+  auto CompileResult = compiler.CompileGlslToSpv(
+    preprocessResult.c_str(), shaderType, path.c_str(), options);
+  if (auto numErr = CompileResult.GetNumErrors(); numErr > 0)
+  {
+    printf("%llu errors compiling %s!\n", numErr, path.c_str());
+    printf("%s", CompileResult.GetErrorMessage().c_str());
+    return {};
+  }
+
+  return { CompileResult.begin(), CompileResult.end() };
+}
+
+std::string Shader::preprocessShader(shaderc::Compiler& compiler, const shaderc::CompileOptions options, const std::vector<std::pair<std::string, std::string>>& replace, std::string path, shaderc_shader_kind shaderType)
+{
   std::string rawSrc = loadFile(path);
   for (const auto& [search, replacement] : replace)
   {
@@ -259,14 +280,5 @@ std::vector<uint32_t>
     return {};
   }
 
-  auto CompileResult = compiler.CompileGlslToSpv(
-    PreprocessResult.begin(), shaderType, path.c_str(), options);
-  if (auto numErr = CompileResult.GetNumErrors(); numErr > 0)
-  {
-    printf("%llu errors compiling %s!\n", numErr, path.c_str());
-    printf("%s", CompileResult.GetErrorMessage().c_str());
-    return {};
-  }
-
-  return { CompileResult.begin(), CompileResult.end() };
+  return std::string(PreprocessResult.begin());
 }

@@ -250,7 +250,6 @@ std::vector<Mesh> LoadObj(std::string path)
       }
       prevName = name;
     }
-
   }
 
   return meshes;

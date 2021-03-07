@@ -8,6 +8,7 @@
 #include "Light.h"
 #include "Camera.h"
 #include "Texture.h"
+#include "DynamicBuffer.h"
 
 #include <vector>
 #include <memory>
@@ -54,6 +55,12 @@ private:
   float sunPosition = 0;
   DirLight globalLight;
   int numLights = 1000;
+  const int max_vertices = 5'000'000;
+  std::unique_ptr<DynamicBuffer> vertexBuffer;
+  std::unique_ptr<DynamicBuffer> indexBuffer;
+  GLuint materialsBuffer{}; // material info
+  GLuint uniformBuffer{}; // model matrices, material indices
+  GLuint drawIndirectBuffer{}; // DrawElementsIndirectCommand
 
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex{};

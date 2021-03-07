@@ -172,7 +172,7 @@ private:
   static constexpr const char* shader_dir_ = "./Resources/Shaders/";
   static std::string loadFile(std::string path);
 
-  GLint compileShader(shaderType type, const std::vector<std::string>& src, std::string_view path);
+  GLuint compileShader(shaderType type, const std::string& src, std::string_view path);
   void initUniforms();
   void checkLinkStatus(std::vector<std::string_view> files);
 
@@ -183,6 +183,12 @@ private:
       const shaderc::CompileOptions options,
       const std::vector<std::pair<std::string, std::string>>& replace,
       std::string path,
-      shaderc_shader_kind a);
+      shaderc_shader_kind shaderType);
 
+  std::string preprocessShader(
+    shaderc::Compiler& compiler,
+    const shaderc::CompileOptions options,
+    const std::vector<std::pair<std::string, std::string>>& replace,
+    std::string path,
+    shaderc_shader_kind shaderType);
 };

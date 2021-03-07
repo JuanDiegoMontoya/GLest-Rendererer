@@ -84,5 +84,13 @@
     <ClInclude Include="Renderer.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="DynamicBuffer.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="DynamicBuffer.inl">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
