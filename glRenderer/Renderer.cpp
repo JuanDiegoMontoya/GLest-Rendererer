@@ -31,7 +31,7 @@ void Renderer::InitWindow()
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  //glfwWindowHint(GLFW_SAMPLES, NUM_MULTISAMPLES);
+  //glfwWindowHint(GLFW_SAMPLES, FRAMEBUFFER_MULTISAMPLES);
   glfwSwapInterval(1);
 
   window = glfwCreateWindow(WIDTH, HEIGHT, "OpenGL", nullptr, nullptr);
@@ -142,7 +142,12 @@ void Renderer::MainLoop()
       globalLight.direction = glm::normalize(globalLight.direction);
     }
 
-    batchedObjects[1].transform.rotation = glm::rotate(batchedObjects[1].transform.rotation, glm::radians(45.f) * dt, glm::vec3(0, 1, 0));
+    for (int i = 1; i < batchedObjects.size(); i++)
+    {
+      glm::vec3& tr = batchedObjects[i].transform.translation;
+      tr = glm::vec3(glm::rotate(glm::mat4(1), glm::radians(-30.0f) * dt, glm::vec3(0, 1, 0)) * glm::vec4(tr, 1.0f));
+      batchedObjects[i].transform.rotation = glm::rotate(batchedObjects[i].transform.rotation, glm::radians(45.f) * dt, glm::vec3(0, 1, 0));
+    }
 
     glBindVertexArray(vao);
 
@@ -969,8 +974,8 @@ void Renderer::ApplyTonemapping(float dt)
 
   const float logLowLum = glm::log(targetLuminance / maxExposure);
   const float logMaxLum = glm::log(targetLuminance / minExposure);
-  const int computePixelsX = WIDTH;
-  const int computePixelsY = HEIGHT;
+  const int computePixelsX = WIDTH / 2;
+  const int computePixelsY = HEIGHT / 2;
 
   {
     auto& hshdr = Shader::shaders["generate_histogram"];

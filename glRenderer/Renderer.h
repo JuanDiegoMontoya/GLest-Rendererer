@@ -41,6 +41,7 @@ private:
   GLFWwindow* window{};
   const uint32_t WIDTH = 1440;
   const uint32_t HEIGHT = 810;
+  //const int FRAMEBUFFER_MULTISAMPLES = 8;
   GLuint vao{};
   bool cursorVisible = true;
   float deviceAnisotropy{ 0.0f };

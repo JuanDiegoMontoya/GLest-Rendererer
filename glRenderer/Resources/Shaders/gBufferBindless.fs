@@ -37,7 +37,7 @@ void main()
   const bool hasSpecular = (material.specularHandle.x != 0 || material.specularHandle.y != 0);
   const bool hasNormal = (material.normalHandle.x != 0 || material.normalHandle.y != 0);
   gNormal = float32x3_to_oct(normalize(normal));
-  vec4 color = vec4(0, 0, 0, 1);
+  vec4 color = vec4(0.1, 0.1, 0.1, 1);
   if (hasDiffuse)
   {
     color = texture(sampler2D(material.diffuseHandle), vTexCoord).rgba;

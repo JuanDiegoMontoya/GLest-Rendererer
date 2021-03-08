@@ -26,6 +26,7 @@ layout (location = 12) uniform vec3 u_globalLight_ambient;
 layout (location = 13) uniform vec3 u_globalLight_diffuse;
 layout (location = 14) uniform vec3 u_globalLight_specular;
 layout (location = 15) uniform vec3 u_globalLight_direction;
+layout (location = 16) uniform float msmBias = 3e-5;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -95,9 +96,8 @@ vec3 cholesky(float m11, float m12, float m13, float m22, float m23, float m33, 
   return vec3(c1, c2, c3);
 }
 
-float getG(vec4 moments, float fragmentDepth, float depthBias, float momentBias)
+float computeMSM(vec4 moments, float fragmentDepth, float depthBias, float momentBias)
 {
-  // Hamburger 4MSM.
   vec4 b = moments * (1.0 - momentBias) + momentBias * vec4(0.5, 0.5, 0.5, 0.5);
   vec3 z = vec3(fragmentDepth - depthBias, 0.0, 0.0);
 
@@ -108,19 +108,17 @@ float getG(vec4 moments, float fragmentDepth, float depthBias, float momentBias)
   float InvD22 = 1.0 / D22;
   float L32    = L32D22 * InvD22;
   
+  // high IQ cholesky
   vec3 c = vec3(1.0f, z[0], z[0] * z[0]);
-  
   c[1] -= b.x;
   c[2] -= b.y + L32 * c[1];
-  
   c[1] *= InvD22;
   c[2] *= D22 / D33D22;
-  
   c[1] -= L32 * c[2];
   c[0] -= dot(c.yz, b.xy);
   //vec3 c = cholesky(1.0, b.x, b.y, b.y, b.z, b.w, 1.0, z.x, z.x * z.x);
   
-  // solve quadratic formula
+  // solve quadratic
   float p = c[1] / c[2];
   float q = c[0] / c[2];
   float D = ((p * p) / 4.0) - q;
@@ -140,11 +138,10 @@ float getG(vec4 moments, float fragmentDepth, float depthBias, float momentBias)
   }
   
   float quotient = (sv[0] * z[2] - b[0] * (sv[0] + z[2]) + b[1]) / ((z[2] - sv[1]) * (z[0] - z[1]));
-                 
+  
   return 1.0 - clamp(sv[2] + sv[3] * quotient, 0.0, 1.0);
 }
 
-float msmBias = 3e-5;
 float ShadowMSM(vec4 lightSpacePos, float cosTheta)
 {
   float depthBias = .005 * tan(acos(cosTheta));
@@ -156,8 +153,8 @@ float ShadowMSM(vec4 lightSpacePos, float cosTheta)
                     0.7926986636, 0.7963415838, 0.7258694464, 0.6539092497,
                     0.0319417555,-0.1722823173,-0.2758014811,-0.3376131734);
   moments.x -= 0.035955884801;
-  moments = magic * moments;
-  return getG(moments, LightTexCoord.z, depthBias * 0.15, msmBias);
+  moments = magic * moments; // undo original curve
+  return computeMSM(moments, LightTexCoord.z, depthBias * 0.15, msmBias);
 }
 
 float Shadow(vec4 lightSpacePos, float cosTheta)

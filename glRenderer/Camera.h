@@ -50,7 +50,7 @@ private:
 
   // projection matrix info
   float fovDeg_ = 90.f;
-  float near_ = .1f;
+  float near_ = .3f;
   float far_ = 300.f;
 
   glm::mat4 view_ = glm::mat4(1);

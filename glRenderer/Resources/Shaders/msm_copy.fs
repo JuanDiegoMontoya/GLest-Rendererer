@@ -13,7 +13,8 @@ void main()
                     -68.571074599,  82.0359750338,  9.3496555107, 47.9456096605,
                      39.3703274134,-35.364903257,  -6.6543490743,-23.9728048165);
   float depth = texture(u_tex, vTexCoord).r;
-  outMoments.xyzw = vec4(depth, depth * depth, depth * depth * depth, depth * depth * depth * depth);
-  outMoments = magic * outMoments;
+  float depthSqr = depth * depth;
+  outMoments.xyzw = vec4(depth, depthSqr, depthSqr * depth, depthSqr * depthSqr);
+  outMoments = magic * outMoments; // increases representable range according to original paper
   outMoments.x += 0.035955884801;
 }
