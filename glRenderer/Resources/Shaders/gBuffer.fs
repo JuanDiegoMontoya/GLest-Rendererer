@@ -49,6 +49,7 @@ void main()
   gNormal.xyz = (normalize(normal) * .5 + .5);
 #endif
   vec4 color = texture(diffuse, vTexCoord).rgba;
+  color.a = 1.0;
   if (color.a <= .01)
   {
     discard;

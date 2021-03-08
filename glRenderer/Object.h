@@ -2,10 +2,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <vector>
+#include "Mesh.h"
 
-class Mesh;
-
-struct Object
+struct Transform
 {
   glm::mat4 GetModelMatrix() const
   {
@@ -24,7 +23,23 @@ struct Object
   glm::vec3 translation{};
   glm::quat rotation{1, 0, 0, 0};
   glm::vec3 scale{};
+};
 
+struct ObjectMeshed
+{
+  Transform transform;
   std::vector<Mesh*> meshes;
 };
 
+struct ObjectBatched
+{
+  Transform transform;
+  std::vector<MeshInfo> meshes;
+};
+
+struct alignas(16) ObjectUniforms // sent to GPU
+{
+  glm::mat4 modelMatrix{};
+  glm::mat4 normalMatrix{};
+  uint32_t materialIndex{};
+};

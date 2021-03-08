@@ -60,6 +60,11 @@ void CompileShaders()
       { "gBuffer.vs", GL_VERTEX_SHADER },
       { "gBuffer.fs", GL_FRAGMENT_SHADER }
     }));
+  Shader::shaders["gBufferBindless"].emplace(Shader(
+    {
+      { "gBufferBindless.vs", GL_VERTEX_SHADER },
+      { "gBufferBindless.fs", GL_FRAGMENT_SHADER }
+    }));
   Shader::shaders["fstexture"].emplace(Shader(
     {
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
@@ -144,7 +149,9 @@ void CompileShaders()
     }));
   Shader::shaders["shadow"].emplace(Shader(
     { { "shadow.vs", GL_VERTEX_SHADER },
-    //{ "vsm.fs", GL_FRAGMENT_SHADER } 
+    }));
+  Shader::shaders["shadowBindless"].emplace(Shader(
+    { { "shadowBindless.vs", GL_VERTEX_SHADER },
     }));
   Shader::shaders["volumetric"].emplace(Shader(
     {

@@ -51,10 +51,10 @@ Mesh::~Mesh()
   glDeleteBuffers(1, &eboID);
 }
 
-std::vector<Mesh> LoadObj(std::string path)
+MeshDescriptor LoadObjBase(const std::string& path,
+  MaterialManager& materialManager)
 {
-  std::vector<Mesh> meshes;
-  std::map<std::string, Material> materialMap;
+  MeshDescriptor meshDescriptor{};
 
   std::string texPath;
   if (size_t pos = path.find_last_of("/\\"); pos != std::string::npos)
@@ -63,12 +63,11 @@ std::vector<Mesh> LoadObj(std::string path)
   }
 
   tinyobj::ObjReaderConfig reader_config;
-  //reader_config.mtl_search_path = "./Resources/Models"; // Path to material files
   reader_config.triangulate = true;
 
   tinyobj::ObjReader reader;
 
-  if (!reader.ParseFromFile(path, reader_config))
+  if (!reader.ParseFromFile(std::string(path), reader_config))
   {
     if (!reader.Error().empty())
     {
@@ -85,7 +84,6 @@ std::vector<Mesh> LoadObj(std::string path)
   auto& attrib = reader.GetAttrib();
   auto& shapes = reader.GetShapes();
   auto& materials = reader.GetMaterials();
-
 
   // Loop over shapes
   for (size_t s = 0; s < shapes.size(); s++)
@@ -174,7 +172,6 @@ std::vector<Mesh> LoadObj(std::string path)
 
       std::string name;
       std::string diffuseName;
-      std::string maskName;
       std::string specularName;
       std::string normalName;
       float shininess = 1.0f;
@@ -182,7 +179,6 @@ std::vector<Mesh> LoadObj(std::string path)
       {
         name = materials[shapes[s].mesh.material_ids[f]].name;
         diffuseName = texPath + materials[shapes[s].mesh.material_ids[f]].diffuse_texname;
-        maskName = texPath + materials[shapes[s].mesh.material_ids[f]].alpha_texname;
         specularName = texPath + materials[shapes[s].mesh.material_ids[f]].specular_texname;
         normalName = texPath + materials[shapes[s].mesh.material_ids[f]].normal_texname;
         shininess = materials[shapes[s].mesh.material_ids[f]].shininess;
@@ -199,22 +195,10 @@ std::vector<Mesh> LoadObj(std::string path)
         {
           //printf("Shape split!\n");
         }
-        Material material{};
-        if (auto findResult = materialMap.find(prevName); findResult != materialMap.end())
-        {
-          material = findResult->second;
-        }
-        else
-        {
-          std::cout << "Creating material: " << prevName << std::endl;
-          material.diffuseTex = new Texture2D(diffuseName, true, true);
-          material.specularTex = new Texture2D(specularName, true, true);
-          material.normalTex = new Texture2D(normalName, false, true);
-          material.hasSpecular = material.specularTex->Valid();
-          material.hasNormal = material.normalTex->Valid();
-          material.shininess = shininess;
-          materialMap[prevName] = material;
-        }
+
+
+        //std::cout << "Creating material: " << prevName << std::endl;
+        materialManager.MakeMaterial(prevName, diffuseName, specularName, normalName, shininess);
 
         uint32_t currentVertexIndex = 0;
         std::unordered_map<Vertex, uint32_t> verticesUnique;
@@ -237,19 +221,52 @@ std::vector<Mesh> LoadObj(std::string path)
         {
           vertices2.push_back(p.first);
         }
-        meshes.emplace_back(vertices2, indices, material);
+        meshDescriptor.vertices.emplace_back(std::move(vertices2));
+        meshDescriptor.indices.emplace_back(std::move(indices));
+        meshDescriptor.materials.emplace_back(std::move(prevName));
 
-        // test
-        //{
-        //  indices.clear();
-        //  for (uint32_t i = 0; i < vertices.size(); i++)
-        //    indices.push_back(i);
-        //  meshes.emplace_back(vertices, indices, material);
-        //}
         vertices.clear();
       }
       prevName = name;
     }
+  }
+
+  assert(meshDescriptor.vertices.size() == meshDescriptor.vertices.size() &&
+    meshDescriptor.vertices.size() == meshDescriptor.materials.size());
+  return meshDescriptor;
+}
+
+std::vector<Mesh> LoadObjMesh(const std::string& path,
+  MaterialManager& materialManager)
+{
+  std::vector<Mesh> meshes;
+
+  auto meshDesc = LoadObjBase(path, materialManager);
+  for (size_t i = 0; i < meshDesc.materials.size(); i++)
+  {
+    meshes.emplace_back(meshDesc.vertices[i],
+      meshDesc.indices[i],
+      *materialManager.GetMaterial(meshDesc.materials[i]));
+  }
+
+  return meshes;
+}
+
+std::vector<MeshInfo> LoadObjBatch(const std::string& path,
+  MaterialManager& materialManager,
+  DynamicBuffer& vertexBuffer,
+  DynamicBuffer& indexBuffer)
+{
+  std::vector<MeshInfo> meshes;
+
+  auto meshDesc = LoadObjBase(path, materialManager);
+  for (size_t i = 0; i < meshDesc.materials.size(); i++)
+  {
+    MeshInfo info;
+    info.verticesAllocHandle = vertexBuffer.Allocate(meshDesc.vertices[i].data(), sizeof(Vertex) * meshDesc.vertices[i].size());
+    info.indicesAllocHandle = indexBuffer.Allocate(meshDesc.indices[i].data(), sizeof(uint32_t) * meshDesc.indices[i].size());
+    info.materialName = meshDesc.materials[i];
+    meshes.push_back(info);
   }
 
   return meshes;

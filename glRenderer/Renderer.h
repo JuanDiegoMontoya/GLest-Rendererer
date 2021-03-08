@@ -48,9 +48,8 @@ private:
   // scene info
   Camera cam;
   std::vector<PointLight> localLights;
-  std::vector<Mesh> terrainMeshes;
   Mesh sphere;
-  std::vector<Object> objects;
+  std::vector<ObjectBatched> batchedObjects;
   GLuint lightSSBO{};
   float sunPosition = 0;
   DirLight globalLight;
@@ -59,8 +58,8 @@ private:
   std::unique_ptr<DynamicBuffer> vertexBuffer;
   std::unique_ptr<DynamicBuffer> indexBuffer;
   GLuint materialsBuffer{}; // material info
-  GLuint uniformBuffer{}; // model matrices, material indices
   GLuint drawIndirectBuffer{}; // DrawElementsIndirectCommand
+  MaterialManager materialManager;
 
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex{};

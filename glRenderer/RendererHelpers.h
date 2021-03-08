@@ -24,12 +24,3 @@ void blurTextureRGBA32f(GLuint inOutTex, GLuint intermediateTexture,
   GLint width, GLint height, GLint passes, GLint strength);
 void blurTextureRGBA16f(GLuint inOutTex, GLuint intermediateTexture, 
   GLint width, GLint height, GLint passes, GLint strength);
-
-struct DrawElementsIndirectCommand
-{
-  GLuint count;
-  GLuint primCount;
-  GLuint firstIndex;
-  GLuint baseVertex;
-  GLuint baseInstance;
-};

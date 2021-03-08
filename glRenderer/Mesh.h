@@ -1,9 +1,10 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <string_view>
 #include <glm/glm.hpp>
-
-class Texture2D;
+#include "Material.h"
+#include "DynamicBuffer.h"
 
 struct Vertex
 {
@@ -19,16 +20,6 @@ struct Vertex
       uv == v.uv;
   }
   //bool operator<=>(const Vertex&) const& = default;
-};
-
-struct Material
-{
-  Texture2D* diffuseTex{};
-  Texture2D* specularTex{};
-  Texture2D* normalTex{};
-  bool hasSpecular{};
-  bool hasNormal{};
-  float shininess{};
 };
 
 class Mesh
@@ -61,21 +52,26 @@ private:
   Material material{};
 };
 
-/// <summary>
-/// Batch/bindless rendering
-/// </summary>
+// Batch/bindless rendering
 struct MeshInfo
 {
-
+  uint64_t verticesAllocHandle{};
+  uint64_t indicesAllocHandle{};
+  std::string materialName{};
+  uint32_t materialIndex{};
 };
 
-class BatchMesh
+struct MeshDescriptor
 {
-public:
-
-private:
-  MeshInfo* meshInfo_{};
-  Material* material_{};
+  std::vector<std::vector<Vertex>> vertices;
+  std::vector<std::vector<uint32_t>> indices;
+  std::vector<std::string> materials;
 };
-
-std::vector<Mesh> LoadObj(std::string path);
+MeshDescriptor LoadObjBase(const std::string& path,
+  MaterialManager& materialManager);
+std::vector<Mesh> LoadObjMesh(const std::string& path,
+  MaterialManager& materialManager);
+std::vector<MeshInfo> LoadObjBatch(const std::string& path,
+  MaterialManager& materialManager,
+  DynamicBuffer& vertexBuffer,
+  DynamicBuffer& indexBuffer);

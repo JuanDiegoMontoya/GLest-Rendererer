@@ -6,6 +6,7 @@
 #include "Shader.h"
 #include "Input.h"
 #include "Utilities.h"
+#include "IndirectDraw.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -141,7 +142,7 @@ void Renderer::MainLoop()
       globalLight.direction = glm::normalize(globalLight.direction);
     }
 
-    objects[1].rotation = glm::rotate(objects[1].rotation, glm::radians(45.f) * dt, glm::vec3(0, 1, 0));
+    batchedObjects[1].transform.rotation = glm::rotate(batchedObjects[1].transform.rotation, glm::radians(45.f) * dt, glm::vec3(0, 1, 0));
 
     glBindVertexArray(vao);
 
@@ -162,18 +163,27 @@ void Renderer::MainLoop()
       glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
       glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo);
       glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-      auto& shadowShader = Shader::shaders["shadow"];
-      shadowShader->Bind();
-      for (const auto& obj : objects)
+
+      std::vector<glm::mat4> uniforms;
+      for (const auto& obj : batchedObjects)
       {
-        shadowShader->SetMat4("u_modelLight", lightMat * obj.GetModelMatrix());
         for (const auto& mesh : obj.meshes)
         {
-          glVertexArrayVertexBuffer(vao, 0, mesh->GetVBOID(), 0, sizeof(Vertex));
-          glVertexArrayElementBuffer(vao, mesh->GetEBOID());
-          glDrawElements(GL_TRIANGLES, mesh->GetVertexCount(), GL_UNSIGNED_INT, nullptr);
+          uniforms.emplace_back(lightMat * obj.transform.GetModelMatrix());
         }
       }
+      GLuint uniformBuffer;
+      glCreateBuffers(1, &uniformBuffer);
+      glNamedBufferStorage(uniformBuffer, uniforms.size() * sizeof(glm::mat4), uniforms.data(), 0);
+      auto& shadowBindlessShader = Shader::shaders["shadowBindless"];
+      shadowBindlessShader->Bind();
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniformBuffer);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, uniformBuffer);
+      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, drawIndirectBuffer);
+      glVertexArrayVertexBuffer(vao, 0, vertexBuffer->GetBufferHandle(), 0, sizeof(Vertex));
+      glVertexArrayElementBuffer(vao, indexBuffer->GetBufferHandle());
+      glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, uniforms.size(), sizeof(DrawElementsIndirectCommand));
+      glDeleteBuffers(1, &uniformBuffer);
     }
 
     GLuint filteredTex{};
@@ -231,36 +241,38 @@ void Renderer::MainLoop()
     {
       glBindFramebuffer(GL_FRAMEBUFFER, gfbo);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      auto& gBufferShader = Shader::shaders["gBuffer"];
-      gBufferShader->Bind();
-      gBufferShader->SetMat4("u_viewProj", cam.GetViewProj());
-      //gBufferShader->SetInt("diffuse", 0);
-      //gBufferShader->SetInt("specular", 1);
-      //gBufferShader->SetInt("u_object.normal", 2);
 
-      for (const auto& obj : objects)
+      // draw batched objects
+      std::vector<ObjectUniforms> uniforms;
+      for (const auto& obj : batchedObjects)
       {
-        gBufferShader->SetMat4("u_model", obj.GetModelMatrix());
-        gBufferShader->SetMat3("u_normalMatrix", obj.GetNormalMatrix());
         for (const auto& mesh : obj.meshes)
         {
-          const auto& mat = mesh->GetMaterial();
-          gBufferShader->SetBool("hasSpecular", mat.hasSpecular);
-          //gBufferShader->SetBool("u_object.hasNormal", mesh->GetMaterial().hasNormal);
-          gBufferShader->SetFloat("shininess", mat.shininess);
-          //glBindTextureUnit(0, mat.diffuseTex->GetID());
-          if (mat.hasSpecular)
+          ObjectUniforms uniform
           {
-            //glBindTextureUnit(1, mat.specularTex->GetID());
-            gBufferShader->SetHandle("specular", mat.specularTex->GetBindlessHandle());
-          }
-          gBufferShader->SetHandle("diffuse", mat.diffuseTex->GetBindlessHandle());
-          //glBindTextureUnit(2, mat.normalTex->GetID());
-          glVertexArrayVertexBuffer(vao, 0, mesh->GetVBOID(), 0, sizeof(Vertex));
-          glVertexArrayElementBuffer(vao, mesh->GetEBOID());
-          glDrawElements(GL_TRIANGLES, mesh->GetVertexCount(), GL_UNSIGNED_INT, nullptr);
+            .modelMatrix = obj.transform.GetModelMatrix(),
+            .normalMatrix = obj.transform.GetNormalMatrix(),
+            .materialIndex = mesh.materialIndex
+          };
+          uniforms.push_back(uniform);
         }
       }
+      GLuint uniformBuffer;
+      glCreateBuffers(1, &uniformBuffer);
+      glNamedBufferStorage(uniformBuffer, sizeof(ObjectUniforms) * uniforms.size(), uniforms.data(), 0);
+
+      auto& gbufBindless = Shader::shaders["gBufferBindless"];
+      gbufBindless->Bind();
+      gbufBindless->SetMat4("u_viewProj", cam.GetViewProj());
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniformBuffer);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, uniformBuffer);
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, materialsBuffer);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, materialsBuffer);
+      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, drawIndirectBuffer);
+      glVertexArrayVertexBuffer(vao, 0, vertexBuffer->GetBufferHandle(), 0, sizeof(Vertex));
+      glVertexArrayElementBuffer(vao, indexBuffer->GetBufferHandle());
+      glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, uniforms.size(), sizeof(DrawElementsIndirectCommand));
+      glDeleteBuffers(1, &uniformBuffer);
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
@@ -356,7 +368,7 @@ void Renderer::MainLoop()
         atrousFilter->SetIVec2("u_resolution", VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
         atrousFilter->Set1FloatArray("kernel[0]", atrouskernel);
         atrousFilter->Set2FloatArray("offsets[0]", atrouskerneloffsets);
-      
+
         glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT0);
         glBindTextureUnit(0, volumetricsTex);
         glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -736,29 +748,87 @@ void Renderer::CreateScene()
   CreateLocalLights();
 
   // setup geometry
-  terrainMeshes = LoadObj("Resources/Models/sponza/sponza.obj");
-  sphere = std::move(LoadObj("Resources/Models/goodSphere.obj")[0]);
+  //terrainMeshes = LoadObjMesh("Resources/Models/sponza/sponza.obj", materialManager);
+  sphere = std::move(LoadObjMesh("Resources/Models/goodSphere.obj", materialManager)[0]);
+  auto sphereBatched = LoadObjBatch("Resources/Models/goodSphere.obj", materialManager, *vertexBuffer, *indexBuffer)[0];
 
-  Object terrain;
-  //std::for_each(terrainMeshes.begin(), terrainMeshes.end(),
-  //  [&terrain](auto& mesh) { terrain.meshes.push_back(&mesh); });
-  for (auto& mesh : terrainMeshes)
-  {
-    terrain.meshes.push_back(&mesh);
-  }
-  terrain.scale = glm::vec3(.05f);
-  objects.push_back(terrain);
+  auto terrain2 = LoadObjBatch("Resources/Models/sponza/sponza.obj", materialManager, *vertexBuffer, *indexBuffer);
 
-  const int num_objects = 5;
-  for (int i = 0; i < num_objects; i++)
+  auto tempMatsStr = materialManager.GetLinearMaterials();
+  for (size_t i = 0; i < tempMatsStr.size(); i++)
   {
-    Object a;
-    a.meshes = { &sphere };
-    a.rotation;
-    a.translation = 2.0f * glm::vec3(glm::cos(glm::two_pi<float>() / num_objects * i), 1.0f, glm::sin(glm::two_pi<float>() / num_objects * i));
-    a.scale = glm::vec3(1.0f);
-    objects.push_back(a);
+    if (sphereBatched.materialName == tempMatsStr[i].first)
+    {
+      sphereBatched.materialIndex = i;
+      break;
+    }
   }
+
+  // setup material buffer
+  std::vector<BindlessMaterial> tempMats;
+  for (const auto& matp : tempMatsStr)
+  {
+    BindlessMaterial bm
+    {
+      .diffuseHandle = matp.second.diffuseTex->GetBindlessHandle(),
+      .specularHandle = matp.second.specularTex->GetBindlessHandle(),
+      .normalHandle = matp.second.normalTex->GetBindlessHandle(),
+      .shininess = matp.second.shininess
+    };
+    tempMats.push_back(bm);
+  }
+  glCreateBuffers(1, &materialsBuffer);
+  glNamedBufferStorage(materialsBuffer, tempMats.size() * sizeof(BindlessMaterial), tempMats.data(), 0);
+
+  ObjectBatched terrain2b;
+  for (auto& mesh : terrain2)
+  {
+    for (size_t i = 0; i < tempMatsStr.size(); i++)
+    {
+      if (mesh.materialName == tempMatsStr[i].first)
+      {
+        mesh.materialIndex = i;
+        break;
+      }
+    }
+    terrain2b.meshes.push_back(mesh);
+  }
+  terrain2b.transform.scale = glm::vec3(.05f);
+  batchedObjects.push_back(terrain2b);
+
+  const int num_spheres = 5;
+  for (int i = 0; i < num_spheres; i++)
+  {
+    ObjectBatched a;
+    a.meshes = { sphereBatched };
+    a.transform.rotation;
+    a.transform.translation = 2.0f * glm::vec3(glm::cos(glm::two_pi<float>() / num_spheres * i), 1.0f, glm::sin(glm::two_pi<float>() / num_spheres * i));
+    a.transform.scale = glm::vec3(1.0f);
+    batchedObjects.push_back(a);
+  }
+
+  // setup indirect draw buffer
+  std::vector<DrawElementsIndirectCommand> cmds;
+  GLuint baseInstance = 0;
+  for (const auto& obj : batchedObjects)
+  {
+    for (const auto& mesh : obj.meshes)
+    {
+      const auto& vtxInfo = vertexBuffer->GetAlloc(mesh.verticesAllocHandle);
+      const auto& idxInfo = indexBuffer->GetAlloc(mesh.indicesAllocHandle);
+      DrawElementsIndirectCommand cmd
+      {
+        .count = idxInfo.size / sizeof(uint32_t),
+        .instanceCount = 1,
+        .firstIndex = idxInfo.offset / sizeof(uint32_t),
+        .baseVertex = vtxInfo.offset / sizeof(Vertex),
+        .baseInstance = baseInstance++,
+      };
+      cmds.push_back(cmd);
+    }
+  }
+  glCreateBuffers(1, &drawIndirectBuffer);
+  glNamedBufferStorage(drawIndirectBuffer, sizeof(DrawElementsIndirectCommand) * cmds.size(), cmds.data(), 0);
 }
 
 void Renderer::Cleanup()
@@ -781,7 +851,7 @@ void Renderer::DrawUI()
     ImGui::SliderInt("Steps", &volumetric_steps, 1, 100);
     ImGui::SliderFloat("Intensity", &volumetric_intensity, 0.0f, 1.0f, "%.3f", 3.0f);
     ImGui::SliderFloat("Offset", &volumetric_noiseOffset, 0.0f, 1.0f);
-    
+
     ImGui::Text((const char*)(u8"À-Trous"));
     ImGui::Separator();
     ImGui::Text("Passes");
@@ -870,7 +940,7 @@ void Renderer::DrawUI()
     ImGui::SliderInt("Binary search steps", &ssr_binarySearchSteps, 0, 10);
     ImGui::End();
   }
-  
+
   {
     ImGui::Begin("View Buffer");
     ImGui::Image((void*)uiViewBuffer, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
@@ -938,7 +1008,7 @@ void Renderer::ApplyTonemapping(float dt)
     glDispatchCompute(1, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
   }
-  
+
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glViewport(0, 0, WIDTH, HEIGHT);
   auto& shdr = Shader::shaders["tonemap"];

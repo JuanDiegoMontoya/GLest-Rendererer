@@ -52,6 +52,9 @@
     <ClCompile Include="Renderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Material.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Shader.h">
@@ -85,6 +88,12 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="DynamicBuffer.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IndirectDraw.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Material.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
