@@ -1,7 +1,8 @@
-# moldy-broccoli (tentative)
-OpenGL renderer and effects playground.
+# GLest Rendererer
+OpenGL 4.6 renderer and playground.
 
 ## Features
+- Takes advantage of bindless and multi-draw capability to minimize CPU overhead
 - Deferred shading with many lights pass
 - Filtered variance shadow mapping (VSM) and exponential shadow mapping (ESM)
 - Volumetric lighting
