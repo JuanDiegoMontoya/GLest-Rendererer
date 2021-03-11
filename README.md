@@ -1,10 +1,10 @@
 # GLest Rendererer
-OpenGL 4.6 renderer and playground.
+OpenGL 4.6 renderer for fun and pain.
 
 ## Features
 - Takes advantage of bindless and multi-draw capability to minimize CPU overhead
 - Deferred shading with many lights pass
-- Filtered variance shadow mapping (VSM) and exponential shadow mapping (ESM)
+- Filtered variance, exponential, and moment shadow mapping options (VSM, ESM, MSM)
 - Volumetric lighting
   - Blurred with edge-avoiding À-Trous filter
 - Normal mapping
