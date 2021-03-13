@@ -917,6 +917,13 @@ void Renderer::DrawUI()
     ImGui::ColorEdit3("Ambient", &globalLight.ambient[0]);
     ImGui::ColorEdit3("Specular", &globalLight.specular[0]);
     ImGui::SliderInt("Local lights", &numLights, 0, 40000);
+    if (ImGui::SliderFloat2("Light falloff", glm::value_ptr(lightFalloff), 0.01f, 10.0f, "%.3f", 2.0f))
+    {
+      if (lightFalloff.y < lightFalloff.x)
+      {
+        std::swap(lightFalloff.x, lightFalloff.y);
+      }
+    }
     if (ImGui::Button("Update local lights"))
     {
       CreateLocalLights();
@@ -1033,7 +1040,7 @@ void Renderer::CreateLocalLights()
   {
     glDeleteBuffers(1, &lightSSBO);
   }
-
+  
   localLights.clear();
   for (int x = 0; x < numLights; x++)
   {
@@ -1041,7 +1048,7 @@ void Renderer::CreateLocalLights()
     light.diffuse = glm::vec4(glm::vec3(rng(0, 1), rng(0, 1), rng(0, 1)), 0.f);
     light.specular = light.diffuse;
     light.position = glm::vec4(glm::vec3(rng(-70, 70), rng(.1f, .6f), rng(-30, 30)), 0.f);
-    light.linear = rng(2, 8);
+    light.linear = rng(lightFalloff.x, lightFalloff.y);
     light.quadratic = 0;// rng(5, 12);
     light.radiusSquared = light.CalcRadiusSquared(.010f);
     localLights.push_back(light);

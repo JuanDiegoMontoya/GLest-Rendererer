@@ -76,6 +76,7 @@ float ShadowESM(vec4 lightSpacePos)
   return clamp(shadowFacktor, 0.0, 1.0);
 }
 
+// find solutions to linear system conforming to a certain specification
 vec3 cholesky(float m11, float m12, float m13, float m22, float m23, float m33, float z1, float z2, float z3)
 {
   float a = sqrt(m11);

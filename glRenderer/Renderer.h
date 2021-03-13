@@ -55,6 +55,7 @@ private:
   float sunPosition = 0;
   DirLight globalLight;
   int numLights = 1000;
+  glm::vec2 lightFalloff{ 2, 8 };
   const int max_vertices = 5'000'000;
   std::unique_ptr<DynamicBuffer> vertexBuffer;
   std::unique_ptr<DynamicBuffer> indexBuffer;
