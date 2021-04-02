@@ -3,7 +3,6 @@
 struct PointLight
 {
   vec4 diffuse;
-  vec4 specular;
 
   vec4 position;
   float linear;

@@ -16,5 +16,5 @@ void main()
 {
   vec2 pos = CreateTri(gl_VertexID); 
   vTexCoord = pos * 2.0;
-  gl_Position = vec4(pos * 4.0 - 1.0, 0.0, 1.0); // xy in [-1, 3]
+  gl_Position = vec4(pos * 4.0 - 1.0, 1.0, 1.0); // xy in [-1, 3]
 }

@@ -11,10 +11,10 @@
 layout (location = 0) in vec2 vTexCoord;
 
 layout (location = 0, binding = 0) uniform sampler2D gNormal;
-layout (location = 1, binding = 1) uniform sampler2D gAlbedoSpec;
-layout (location = 2, binding = 2) uniform sampler2D gShininess;
+layout (location = 1, binding = 1) uniform sampler2D gAlbedo;
+layout (location = 2, binding = 2) uniform sampler2D gRMA;
 layout (location = 3, binding = 3) uniform sampler2D gDepth;
-layout (location = 4, binding = 4) uniform sampler2D shadowMap; // PCF
+layout (location = 4, binding = 4) uniform sampler2D shadowMap; // PCF, raw shadowmap
 layout (location = 5, binding = 5) uniform sampler2D filteredShadow; // ESM or VSM
 layout (location = 6) uniform vec3 u_viewPos;
 layout (location = 7) uniform mat4 u_lightMatrix;
@@ -172,16 +172,16 @@ float Shadow(vec4 lightSpacePos, float cosTheta)
 void main()
 {
   vec2 texSize = textureSize(gNormal, 0);
-  vec4 albedoSpec = texture(gAlbedoSpec, vTexCoord).rgba;
-  vec3 albedo = albedoSpec.rgb;
-  float specular = albedoSpec.a;
-  vec3 vPos = WorldPosFromDepth(texture(gDepth, vTexCoord).r, texSize, u_invViewProj);
-  vec3 vNormal = oct_to_float32x3(texture(gNormal, vTexCoord).xy);
+  vec3 albedo = texture(gAlbedo, vTexCoord).rgb;
+  float depth = texture(gDepth, vTexCoord).r;
+  vec3 vPos = WorldPosFromDepth(depth, texSize, u_invViewProj);
+  vec2 octNormal = texture(gNormal, vTexCoord).xy;
+  vec3 vNormal = oct_to_float32x3(octNormal);
   //vec3 vNormal = texture(gNormal, vTexCoord).xyz;
-  float shininess = texture(gShininess, vTexCoord).r;
+  float roughness = texture(gRMA, vTexCoord).r;
   vec4 lightSpacePos = u_lightMatrix * vec4(vPos, 1.0);
 
-  if (vNormal == vec3(0))
+  if (depth == 1.0)
   {
     discard;
   }
@@ -193,11 +193,11 @@ void main()
   
   float spec = 0.0;
   vec3 reflectDir = reflect(-lightDir, vNormal);
-  spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess) * SPECULAR_STRENGTH;
+  spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0) * SPECULAR_STRENGTH;
   
   vec3 ambient = u_globalLight_ambient * albedo;
   vec3 diffuse = u_globalLight_diffuse * diff * albedo;
-  vec3 specu = u_globalLight_specular * spec * specular;
+  vec3 specu = u_globalLight_specular * spec * (1.0 - roughness);
 
   float shadow = 0.0;
   if (diff > 0.0) // only shadow light-facing pixels

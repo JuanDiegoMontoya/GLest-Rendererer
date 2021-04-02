@@ -9,5 +9,6 @@ layout (location = 0) out float expDepth;
 
 void main()
 {
-  expDepth = exp(u_C * texture(u_tex, vTexCoord).r);
+  float depth = texture(u_tex, vTexCoord).r;
+  expDepth = exp(u_C * depth);
 }

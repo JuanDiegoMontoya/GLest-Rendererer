@@ -16,8 +16,7 @@ struct Vertex
 
   bool operator==(const Vertex& v) const&
   {
-    return position == v.position && normal == v.normal &&
-      uv == v.uv;
+    return position == v.position && normal == v.normal && uv == v.uv;
   }
   //bool operator<=>(const Vertex&) const& = default;
 };

@@ -19,8 +19,9 @@ layout (location = 0) out vec4 fragColor;
 float Shadow(vec4 lightSpacePos)
 {
   vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-  if(projCoords.z > 1.0) return 0.0;
+  if (projCoords.z > 1.0) return 1.0;
   projCoords = projCoords * 0.5 + 0.5;
+  if (any(lessThan(projCoords.xy, vec2(0))) || any(greaterThan(projCoords.xy, vec2(1)))) return 1.0;
   float closestDepth = texture(shadowDepth, projCoords.xy).r;
 
   float currentDepth = projCoords.z;

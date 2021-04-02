@@ -8,6 +8,7 @@
 #include "Light.h"
 #include "Camera.h"
 #include "Texture.h"
+#include "StaticBuffer.h"
 #include "DynamicBuffer.h"
 
 #include <vector>
@@ -46,12 +47,19 @@ private:
   bool cursorVisible = true;
   float deviceAnisotropy{ 0.0f };
 
+  void LoadScene1();
+  void LoadScene2();
+  void SetupBuffers(); // draw commands, materials
+
+  // pbr stuff
+  std::unique_ptr<Texture2D> envMap_hdri{};
+  std::unique_ptr<Texture2D> envMap_irradiance{};
+
   // scene info
   Camera cam;
   std::vector<PointLight> localLights;
   Mesh sphere;
   std::vector<ObjectBatched> batchedObjects;
-  GLuint lightSSBO{};
   float sunPosition = 0;
   DirLight globalLight;
   int numLights = 1000;
@@ -59,8 +67,9 @@ private:
   const int max_vertices = 5'000'000;
   std::unique_ptr<DynamicBuffer> vertexBuffer;
   std::unique_ptr<DynamicBuffer> indexBuffer;
-  GLuint materialsBuffer{}; // material info
-  GLuint drawIndirectBuffer{}; // DrawElementsIndirectCommand
+  std::unique_ptr<StaticBuffer> lightSSBO{};
+  std::unique_ptr<StaticBuffer> materialsBuffer; // material info
+  std::unique_ptr<StaticBuffer> drawIndirectBuffer; // DrawElementsIndirectCommand
   MaterialManager materialManager;
 
   // volumetric stuff
@@ -97,7 +106,7 @@ private:
     { -2, -2 }, { -1, -2 }, { 0, -2 }, { 1, -2 }, { 2, -2 } };
 
   // deferred stuff
-  GLuint gfbo{}, gAlbedoSpec{}, gNormal{}, gDepth{}, gShininess{};
+  GLuint gfbo{}, gAlbedo{}, gNormal{}, gDepth{}, gRMA{}; // gRMA = roughness, metalness, ambient occlusion
   GLuint postprocessFbo{}, postprocessColor{};
 
   // ssr stuff
@@ -137,7 +146,8 @@ private:
 
   // HDR stuff
   GLuint hdrfbo{}, hdrColor{}, hdrDepth{};
-  GLuint histogramBuffer{}, exposureBuffer{};
+  std::unique_ptr<StaticBuffer> histogramBuffer;
+  std::unique_ptr<StaticBuffer> exposureBuffer;
   float targetLuminance = .22f;
   float minExposure = .1f;
   float maxExposure = 100.0f;

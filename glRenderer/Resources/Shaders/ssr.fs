@@ -5,7 +5,7 @@ layout (location = 0) in vec2 vTexCoord;
 
 layout (location = 0, binding = 0) uniform sampler2D gColor;
 layout (location = 1, binding = 1) uniform sampler2D gDepth;
-layout (location = 2, binding = 2) uniform sampler2D gShininess;
+layout (location = 2, binding = 2) uniform sampler2D gRMA;
 layout (location = 3, binding = 3) uniform sampler2D gNormal;
 layout (location = 4) uniform mat4 u_proj;
 layout (location = 5) uniform mat4 u_view;
@@ -76,13 +76,18 @@ vec4 Raycast(vec3 dir, inout vec3 hit, out float dDepth)
 
 void main()
 {
-  float shininess = texture(gShininess, vTexCoord).r;
-  if (shininess <= 1.0)
+  float roughness = texture(gRMA, vTexCoord).r;
+  if (roughness > 0.4) // TODO: use roughness to pick a LoD
+  {
+    discard;
+  }
+  float depth = texture(gDepth, vTexCoord).x;
+  if (depth == 1.0)
   {
     discard;
   }
 
-  vec3 worldPosition = WorldPosFromDepth(texture(gDepth, vTexCoord).x, u_viewportSize, u_invViewProj);
+  vec3 worldPosition = WorldPosFromDepth(depth, u_viewportSize, u_invViewProj);
   vec3 worldNormal = oct_to_float32x3(texture(gNormal, vTexCoord).xy);
 
   vec3 viewPosition = (u_view * vec4(worldPosition, 1.0)).xyz;

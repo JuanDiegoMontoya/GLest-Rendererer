@@ -5,9 +5,11 @@ MaterialManager::~MaterialManager()
 {
   for (auto& p : materials)
   {
-    delete p.second.diffuseTex;
-    delete p.second.specularTex;
+    delete p.second.albedoTex;
+    delete p.second.roughnessTex;
+    delete p.second.metalnessTex;
     delete p.second.normalTex;
+    delete p.second.ambientOcclusionTex;
   }
 }
 
@@ -21,7 +23,12 @@ std::optional<Material> MaterialManager::GetMaterial(const std::string& mat)
   return it->second;
 }
 
-Material& MaterialManager::MakeMaterial(std::string name, std::string diffuseTexName, std::string specularTexName, std::string normalTexName, float shininess)
+Material& MaterialManager::MakeMaterial(std::string name,
+  std::string albedoTexName,
+  std::string roughnessTexName,
+  std::string metalnessTexName,
+  std::string normalTexName,
+  std::string ambientOcclusionTexName)
 {
   if (auto it  = materials.find(name); it != materials.end())
   {
@@ -29,10 +36,11 @@ Material& MaterialManager::MakeMaterial(std::string name, std::string diffuseTex
   }
 
   Material material;
-  material.diffuseTex = new Texture2D(diffuseTexName, true, true);
-  material.specularTex = new Texture2D(specularTexName, true, true);
+  material.albedoTex = new Texture2D(albedoTexName, false, true);
+  material.roughnessTex = new Texture2D(roughnessTexName, false, true);
+  material.metalnessTex = new Texture2D(metalnessTexName, false, true);
   material.normalTex = new Texture2D(normalTexName, false, true);
-  material.shininess = shininess;
+  material.ambientOcclusionTex = new Texture2D(ambientOcclusionTexName, false, true);
   auto p = materials.insert({ name, material });
   return p.first->second;
 }

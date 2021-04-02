@@ -197,6 +197,7 @@
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="RendererHelpers.cpp" />
     <ClCompile Include="Shader.cpp" />
+    <ClCompile Include="StaticBuffer.cpp" />
     <ClCompile Include="Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -210,7 +211,9 @@
     <ClInclude Include="Object.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="RendererHelpers.h" />
+    <ClInclude Include="Scene.h" />
     <ClInclude Include="Shader.h" />
+    <ClInclude Include="StaticBuffer.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="Utilities.h" />
   </ItemGroup>

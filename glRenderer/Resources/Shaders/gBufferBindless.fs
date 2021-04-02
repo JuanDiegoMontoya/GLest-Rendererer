@@ -4,11 +4,11 @@
 
 struct Material
 {
-  uvec2 diffuseHandle;
-  uvec2 specularHandle;
+  uvec2 albedoHandle;
+  uvec2 roughnessHandle;
+  uvec2 metalnessHandle;
   uvec2 normalHandle;
-  float shininess;
-  float _pad00;
+  uvec2 ambientOcclusionHandle;
 };
 
 layout (binding = 1, std430) readonly buffer Materials
@@ -25,32 +25,42 @@ layout (location = 0) in VS_OUT
   //mat3 TBN;
 };
 
-layout (location = 0) out vec4 gAlbedoSpec;
+layout (location = 0) out vec4 gAlbedo;
 layout (location = 1) out vec2 gNormal;
-layout (location = 2) out float gShininess;
+layout (location = 2) out vec4 gRMA;
 
 void main()
 {
   Material material = materials[vMaterialIndex];
   vec3 normal = normalize(vNormal);
-  const bool hasDiffuse = (material.diffuseHandle.x != 0 || material.diffuseHandle.y != 0);
-  const bool hasSpecular = (material.specularHandle.x != 0 || material.specularHandle.y != 0);
+  const bool hasAlbedo = (material.albedoHandle.x != 0 || material.albedoHandle.y != 0);
+  const bool hasRoughness = (material.roughnessHandle.x != 0 || material.roughnessHandle.y != 0);
+  const bool hasMetalness = (material.metalnessHandle.x != 0 || material.metalnessHandle.y != 0);
   const bool hasNormal = (material.normalHandle.x != 0 || material.normalHandle.y != 0);
+  const bool hasAmbientOcclusion = (material.ambientOcclusionHandle.x != 0 || material.ambientOcclusionHandle.y != 0);
   gNormal = float32x3_to_oct(normalize(normal));
   vec4 color = vec4(0.1, 0.1, 0.1, 1);
-  if (hasDiffuse)
+  if (hasAlbedo)
   {
-    color = texture(sampler2D(material.diffuseHandle), vTexCoord).rgba;
+    color = texture(sampler2D(material.albedoHandle), vTexCoord).rgba;
   }
   if (color.a <= .01)
   {
     discard;
   }
-  gAlbedoSpec.rgb = color.rgb;
-  gAlbedoSpec.a = 0.0;
-  if (hasSpecular)
+  gAlbedo.rgb = color.rgb;
+  gAlbedo.a = 1.0; // unused
+  gRMA.rgba = vec4(1.0, 0.0, 0.0, 1.0); // sane defaults, gRMA.a is unused
+  if (hasRoughness)
   {
-    gAlbedoSpec.a = texture(sampler2D(material.specularHandle), vTexCoord).r;
+    gRMA[0] = texture(sampler2D(material.roughnessHandle), vTexCoord).r;
   }
-  gShininess.r = material.shininess;
+  if (hasMetalness)
+  {
+    gRMA[1] = texture(sampler2D(material.metalnessHandle), vTexCoord).r;
+  }
+  if (hasAmbientOcclusion)
+  {
+    gRMA[2] = texture(sampler2D(material.ambientOcclusionHandle), vTexCoord).r;
+  }
 }

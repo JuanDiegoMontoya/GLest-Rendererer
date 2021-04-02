@@ -177,18 +177,15 @@ void Renderer::MainLoop()
           uniforms.emplace_back(lightMat * obj.transform.GetModelMatrix());
         }
       }
-      GLuint uniformBuffer;
-      glCreateBuffers(1, &uniformBuffer);
-      glNamedBufferStorage(uniformBuffer, uniforms.size() * sizeof(glm::mat4), uniforms.data(), 0);
+      StaticBuffer uniformBuffer(uniforms.data(), uniforms.size() * sizeof(glm::mat4), 0);
       auto& shadowBindlessShader = Shader::shaders["shadowBindless"];
       shadowBindlessShader->Bind();
-      glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniformBuffer);
-      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, uniformBuffer);
-      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, drawIndirectBuffer);
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniformBuffer.ID());
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, uniformBuffer.ID());
+      drawIndirectBuffer->Bind(GL_DRAW_INDIRECT_BUFFER);
       glVertexArrayVertexBuffer(vao, 0, vertexBuffer->GetBufferHandle(), 0, sizeof(Vertex));
       glVertexArrayElementBuffer(vao, indexBuffer->GetBufferHandle());
       glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, uniforms.size(), sizeof(DrawElementsIndirectCommand));
-      glDeleteBuffers(1, &uniformBuffer);
     }
 
     GLuint filteredTex{};
@@ -262,29 +259,24 @@ void Renderer::MainLoop()
           uniforms.push_back(uniform);
         }
       }
-      GLuint uniformBuffer;
-      glCreateBuffers(1, &uniformBuffer);
-      glNamedBufferStorage(uniformBuffer, sizeof(ObjectUniforms) * uniforms.size(), uniforms.data(), 0);
+      StaticBuffer uniformBuffer(uniforms.data(), sizeof(ObjectUniforms) * uniforms.size(), 0);
 
       auto& gbufBindless = Shader::shaders["gBufferBindless"];
       gbufBindless->Bind();
       gbufBindless->SetMat4("u_viewProj", cam.GetViewProj());
-      glBindBuffer(GL_SHADER_STORAGE_BUFFER, uniformBuffer);
-      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, uniformBuffer);
-      glBindBuffer(GL_SHADER_STORAGE_BUFFER, materialsBuffer);
-      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, materialsBuffer);
-      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, drawIndirectBuffer);
+      uniformBuffer.BindBase(GL_SHADER_STORAGE_BUFFER, 0);
+      materialsBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 1);
+      drawIndirectBuffer->Bind(GL_DRAW_INDIRECT_BUFFER);
       glVertexArrayVertexBuffer(vao, 0, vertexBuffer->GetBufferHandle(), 0, sizeof(Vertex));
       glVertexArrayElementBuffer(vao, indexBuffer->GetBufferHandle());
       glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, uniforms.size(), sizeof(DrawElementsIndirectCommand));
-      glDeleteBuffers(1, &uniformBuffer);
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindTextureUnit(0, gNormal);
-    glBindTextureUnit(1, gAlbedoSpec);
-    glBindTextureUnit(2, gShininess);
+    glBindTextureUnit(1, gAlbedo);
+    glBindTextureUnit(2, gRMA);
     glBindTextureUnit(3, gDepth);
     glBindTextureUnit(4, shadowDepth);
     glBindTextureUnit(5, filteredTex);
@@ -320,15 +312,34 @@ void Renderer::MainLoop()
       gPhongLocal->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
       gPhongLocal->SetVec3("u_viewPos", cam.GetPos());
       gPhongLocal->SetInt("gNormal", 0);
-      gPhongLocal->SetInt("gAlbedoSpec", 1);
-      gPhongLocal->SetInt("gShininess", 2);
+      gPhongLocal->SetInt("gAlbedo", 1);
+      gPhongLocal->SetInt("gRMA", 2);
       gPhongLocal->SetInt("gDepth", 3);
-      glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
-      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, lightSSBO);
+      lightSSBO->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
       glVertexArrayVertexBuffer(vao, 0, sphere.GetVBOID(), 0, sizeof(Vertex));
       glVertexArrayElementBuffer(vao, sphere.GetEBOID());
       glDrawElementsInstanced(GL_TRIANGLES, sphere.GetVertexCount(), GL_UNSIGNED_INT, nullptr, localLights.size());
       glCullFace(GL_BACK);
+    }
+
+    // skybox pass
+    {
+      glBlitNamedFramebuffer(gfbo, hdrfbo, 
+        0, 0, WIDTH, HEIGHT, 
+        0, 0, WIDTH, HEIGHT, 
+        GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+      glEnable(GL_DEPTH_TEST);
+      glDepthMask(GL_FALSE);
+      glDepthFunc(GL_LEQUAL);
+      glBlendFunc(GL_ONE, GL_ZERO);
+      glBindTextureUnit(0, envMap_hdri->GetID());
+
+      auto& hdriShader = Shader::shaders["hdri_skybox"];
+      hdriShader->Bind();
+      hdriShader->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
+      hdriShader->SetIVec2("u_screenSize", WIDTH, HEIGHT);
+      hdriShader->SetVec3("u_camPos", cam.GetPos());
+      glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
     // volumetric/crepuscular/god rays pass (write to volumetrics texture)
@@ -402,7 +413,7 @@ void Renderer::MainLoop()
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       glBindTextureUnit(0, hdrColor);
       glBindTextureUnit(1, gDepth);
-      glBindTextureUnit(2, gShininess);
+      glBindTextureUnit(2, gRMA);
       glBindTextureUnit(3, gNormal);
       ssrShader->SetMat4("u_proj", cam.GetProj());
       ssrShader->SetMat4("u_view", cam.GetView());
@@ -449,7 +460,7 @@ void Renderer::MainLoop()
 
     if (Input::IsKeyDown(GLFW_KEY_1))
     {
-      drawFSTexture(gAlbedoSpec);
+      drawFSTexture(gAlbedo);
     }
     if (Input::IsKeyDown(GLFW_KEY_2))
     {
@@ -461,7 +472,7 @@ void Renderer::MainLoop()
     }
     if (Input::IsKeyDown(GLFW_KEY_4))
     {
-      drawFSTexture(gShininess);
+      drawFSTexture(gRMA);
     }
     if (Input::IsKeyDown(GLFW_KEY_5))
     {
@@ -486,6 +497,10 @@ void Renderer::MainLoop()
     if (Input::IsKeyDown(GLFW_KEY_0))
     {
       drawFSTexture(vshadowDepthGoodFormat);
+    }
+    if (Input::IsKeyDown(GLFW_KEY_P))
+    {
+      drawFSTexture(envMap_hdri->GetID());
     }
     if (Input::IsKeyPressed(GLFW_KEY_C))
     {
@@ -544,7 +559,7 @@ void Renderer::CreateFramebuffers()
   glCreateTextures(GL_TEXTURE_2D, 1, &hdrColor);
   glTextureStorage2D(hdrColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &hdrDepth);
-  glTextureStorage2D(hdrDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
+  glTextureStorage2D(hdrDepth, 1, GL_DEPTH_COMPONENT32, WIDTH, HEIGHT);
   glCreateFramebuffers(1, &hdrfbo);
   glNamedFramebufferTexture(hdrfbo, GL_COLOR_ATTACHMENT0, hdrColor, 0);
   glNamedFramebufferTexture(hdrfbo, GL_DEPTH_ATTACHMENT, hdrDepth, 0);
@@ -607,10 +622,8 @@ void Renderer::CreateFramebuffers()
   // create tone mapping buffers
   std::vector<int> zeros(NUM_BUCKETS, 0);
   float expo[] = { exposureFactor, 0 };
-  glCreateBuffers(1, &exposureBuffer);
-  glNamedBufferStorage(exposureBuffer, 2 * sizeof(float), expo, 0);
-  glCreateBuffers(1, &histogramBuffer);
-  glNamedBufferStorage(histogramBuffer, NUM_BUCKETS * sizeof(int), zeros.data(), 0);
+  exposureBuffer = std::make_unique<StaticBuffer>(expo, 2 * sizeof(float), 0);
+  histogramBuffer = std::make_unique<StaticBuffer>(zeros.data(), zeros.size() * sizeof(int), 0);
 
   const GLfloat txzeros[] = { 0, 0, 0, 0 };
   glCreateTextures(GL_TEXTURE_2D, 1, &shadowDepth);
@@ -682,23 +695,23 @@ void Renderer::CreateFramebuffers()
   {
     throw std::runtime_error("Failed to create MSM framebuffer");
   }
-
+  
   // create texture attachments for gBuffer FBO
-  glCreateTextures(GL_TEXTURE_2D, 1, &gAlbedoSpec);
-  glTextureStorage2D(gAlbedoSpec, 1, GL_RGBA8, WIDTH, HEIGHT);
+  glCreateTextures(GL_TEXTURE_2D, 1, &gAlbedo);
+  glTextureStorage2D(gAlbedo, 1, GL_RGBA8, WIDTH, HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &gNormal);
   glTextureStorage2D(gNormal, 1, GL_RG8_SNORM, WIDTH, HEIGHT);
   //glTextureStorage2D(gNormal, 1, GL_RGBA8_SNORM, WIDTH, HEIGHT); // debugging format
-  glCreateTextures(GL_TEXTURE_2D, 1, &gShininess);
-  glTextureStorage2D(gShininess, 1, GL_R16F, WIDTH, HEIGHT);
+  glCreateTextures(GL_TEXTURE_2D, 1, &gRMA);
+  glTextureStorage2D(gRMA, 1, GL_RGB10_A2, WIDTH, HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &gDepth);
   glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32, WIDTH, HEIGHT);
 
   // create gBuffer FBO
   glCreateFramebuffers(1, &gfbo);
-  glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT0, gAlbedoSpec, 0);
+  glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT0, gAlbedo, 0);
   glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT1, gNormal, 0);
-  glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT2, gShininess, 0);
+  glNamedFramebufferTexture(gfbo, GL_COLOR_ATTACHMENT2, gRMA, 0);
   glNamedFramebufferTexture(gfbo, GL_DEPTH_ATTACHMENT, gDepth, 0);
   GLenum buffers[] = { GL_COLOR_ATTACHMENT0,
     GL_COLOR_ATTACHMENT1,
@@ -753,12 +766,14 @@ void Renderer::CreateScene()
   CreateLocalLights();
 
   // setup geometry
-  //terrainMeshes = LoadObjMesh("Resources/Models/sponza/sponza.obj", materialManager);
+  envMap_hdri = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.hdr", true, false);
+  envMap_irradiance = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.irr.hdr", true, false);
   sphere = std::move(LoadObjMesh("Resources/Models/goodSphere.obj", materialManager)[0]);
   auto sphereBatched = LoadObjBatch("Resources/Models/goodSphere.obj", materialManager, *vertexBuffer, *indexBuffer)[0];
 
+  //auto terrain2 = LoadObjBatch("Resources/Models/avocado/avocado.obj", materialManager, *vertexBuffer, *indexBuffer);
   auto terrain2 = LoadObjBatch("Resources/Models/sponza/sponza.obj", materialManager, *vertexBuffer, *indexBuffer);
-
+  
   auto tempMatsStr = materialManager.GetLinearMaterials();
   for (size_t i = 0; i < tempMatsStr.size(); i++)
   {
@@ -775,15 +790,15 @@ void Renderer::CreateScene()
   {
     BindlessMaterial bm
     {
-      .diffuseHandle = matp.second.diffuseTex->GetBindlessHandle(),
-      .specularHandle = matp.second.specularTex->GetBindlessHandle(),
+      .albedoHandle = matp.second.albedoTex->GetBindlessHandle(),
+      .roughnessHandle = matp.second.roughnessTex->GetBindlessHandle(),
+      .metalnessHandle = matp.second.metalnessTex->GetBindlessHandle(),
       .normalHandle = matp.second.normalTex->GetBindlessHandle(),
-      .shininess = matp.second.shininess
+      .ambientOcclusionHandle = matp.second.ambientOcclusionTex->GetBindlessHandle(),
     };
     tempMats.push_back(bm);
   }
-  glCreateBuffers(1, &materialsBuffer);
-  glNamedBufferStorage(materialsBuffer, tempMats.size() * sizeof(BindlessMaterial), tempMats.data(), 0);
+  materialsBuffer = std::make_unique<StaticBuffer>(tempMats.data(), tempMats.size() * sizeof(BindlessMaterial), 0);
 
   ObjectBatched terrain2b;
   for (auto& mesh : terrain2)
@@ -832,8 +847,7 @@ void Renderer::CreateScene()
       cmds.push_back(cmd);
     }
   }
-  glCreateBuffers(1, &drawIndirectBuffer);
-  glNamedBufferStorage(drawIndirectBuffer, sizeof(DrawElementsIndirectCommand) * cmds.size(), cmds.data(), 0);
+  drawIndirectBuffer = std::make_unique<StaticBuffer>(cmds.data(), sizeof(DrawElementsIndirectCommand) * cmds.size(), 0);
 }
 
 void Renderer::Cleanup()
@@ -841,6 +855,48 @@ void Renderer::Cleanup()
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
+
+  glDeleteVertexArrays(1, &vao);
+
+  // do not gaze at it too closely
+  glDeleteTextures(1, &volumetricsTex);
+  glDeleteTextures(1, &volumetricsTexBlur);
+  glDeleteFramebuffers(1, &volumetricsFbo);
+
+  glDeleteTextures(1, &atrousTex);
+  glDeleteFramebuffers(1, &atrousFbo);
+
+  glDeleteTextures(1, &gAlbedo);
+  glDeleteTextures(1, &gNormal);
+  glDeleteTextures(1, &gDepth);
+  glDeleteTextures(1, &gRMA);
+  glDeleteFramebuffers(1, &gfbo);
+
+  glDeleteTextures(1, &postprocessColor);
+  glDeleteFramebuffers(1, &postprocessFbo);
+
+  glDeleteTextures(1, &ssrTex);
+  glDeleteTextures(1, &ssrTexBlur);
+  glDeleteFramebuffers(1, &ssrFbo);
+
+  glDeleteTextures(1, &shadowDepth);
+  glDeleteFramebuffers(1, &shadowFbo);
+
+  glDeleteTextures(1, &vshadowDepthGoodFormat);
+  glDeleteTextures(1, &vshadowMomentBlur);
+  glDeleteFramebuffers(1, &vshadowGoodFormatFbo);
+
+  glDeleteTextures(1, &eExpShadowDepth);
+  glDeleteTextures(1, &eShadowDepthBlur);
+  glDeleteFramebuffers(1, &eShadowFbo);
+
+  glDeleteTextures(1, &msmShadowMoments);
+  glDeleteTextures(1, &msmShadowMomentsBlur);
+  glDeleteFramebuffers(1, &msmShadowFbo);
+
+  glDeleteTextures(1, &hdrColor);
+  glDeleteTextures(1, &hdrDepth);
+  glDeleteFramebuffers(1, &hdrfbo);
 
   glfwDestroyWindow(window);
   glfwTerminate();
@@ -956,10 +1012,10 @@ void Renderer::DrawUI()
   {
     ImGui::Begin("View Buffer");
     ImGui::Image((void*)uiViewBuffer, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
-    ImGui::RadioButton("gAlbedoSpec", &uiViewBuffer, gAlbedoSpec);
+    ImGui::RadioButton("gAlbedo", &uiViewBuffer, gAlbedo);
     ImGui::RadioButton("gNormal", &uiViewBuffer, gNormal);
     ImGui::RadioButton("gDepth", &uiViewBuffer, gDepth);
-    ImGui::RadioButton("gShininess", &uiViewBuffer, gShininess);
+    ImGui::RadioButton("gRMA", &uiViewBuffer, gRMA);
     ImGui::RadioButton("hdrColor", &uiViewBuffer, hdrColor);
     ImGui::RadioButton("hdrDepth", &uiViewBuffer, hdrDepth);
     ImGui::RadioButton("shadowDepthGoodFormat", &uiViewBuffer, vshadowDepthGoodFormat);
@@ -994,8 +1050,7 @@ void Renderer::ApplyTonemapping(float dt)
     const int Y_SIZE = 8;
     int xgroups = (computePixelsX + X_SIZE - 1) / X_SIZE;
     int ygroups = (computePixelsY + Y_SIZE - 1) / Y_SIZE;
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, histogramBuffer);
+    histogramBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
     glDispatchCompute(xgroups, ygroups, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
   }
@@ -1005,10 +1060,8 @@ void Renderer::ApplyTonemapping(float dt)
   //printf("Exposure: %f\n", expo);
 
   {
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, exposureBuffer);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, exposureBuffer);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer);
+    exposureBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
+    histogramBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 1);
     auto& cshdr = Shader::shaders["calc_exposure"];
     cshdr->Bind();
     cshdr->SetFloat("u_dt", dt);
@@ -1036,23 +1089,31 @@ void Renderer::ApplyTonemapping(float dt)
 
 void Renderer::CreateLocalLights()
 {
-  if (lightSSBO)
-  {
-    glDeleteBuffers(1, &lightSSBO);
-  }
-  
   localLights.clear();
   for (int x = 0; x < numLights; x++)
   {
     PointLight light;
     light.diffuse = glm::vec4(glm::vec3(rng(0, 1), rng(0, 1), rng(0, 1)), 0.f);
-    light.specular = light.diffuse;
     light.position = glm::vec4(glm::vec3(rng(-70, 70), rng(.1f, .6f), rng(-30, 30)), 0.f);
     light.linear = rng(lightFalloff.x, lightFalloff.y);
     light.quadratic = 0;// rng(5, 12);
     light.radiusSquared = light.CalcRadiusSquared(.010f);
     localLights.push_back(light);
   }
-  glCreateBuffers(1, &lightSSBO);
-  glNamedBufferStorage(lightSSBO, glm::max(size_t(1), localLights.size() * sizeof(PointLight)), localLights.data(), 0);
+  lightSSBO = std::make_unique<StaticBuffer>(localLights.data(), glm::max(size_t(1), localLights.size() * sizeof(PointLight)), 0);
+}
+
+void Renderer::LoadScene1()
+{
+
+}
+
+void Renderer::LoadScene2()
+{
+
+}
+
+void Renderer::SetupBuffers()
+{
+
 }

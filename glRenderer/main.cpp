@@ -21,11 +21,8 @@ int main()
 
 // TODO list (unordered)
 // PCF
-// MSM
-// skybox
 // image-based lighting
 // tiled/clustered shading
-// efficient draw call submission/multi draw
 // PBR
 // correctly account for shininess term in SSR
 // fix normal mapping (again)
@@ -36,3 +33,7 @@ int main()
 // ESM
 // fix normal mapping
 // use index buffer
+// MSM
+// skybox
+// efficient draw call submission/multi draw
+// bindless texturing

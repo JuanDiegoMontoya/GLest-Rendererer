@@ -186,6 +186,11 @@ void CompileShaders()
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
       { "ssr.fs", GL_FRAGMENT_SHADER }
     }));
+  Shader::shaders["hdri_skybox"].emplace(Shader(
+    {
+      { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+      { "hdri_skybox.fs", GL_FRAGMENT_SHADER }
+    }));
 }
 
 void drawFSTexture(GLuint texID)

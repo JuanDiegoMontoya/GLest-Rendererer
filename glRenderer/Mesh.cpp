@@ -171,17 +171,22 @@ MeshDescriptor LoadObjBase(const std::string& path,
       //vertices[vertices.size() - 1].bitangent = bitangent;
 
       std::string name;
-      std::string diffuseName;
-      std::string specularName;
+      std::string albedoName;
+      std::string roughnessName;
+      std::string metalnessName;
       std::string normalName;
+      std::string ambientOcclusionName;
       float shininess = 1.0f;
       if (!materials.empty())
       {
-        name = materials[shapes[s].mesh.material_ids[f]].name;
-        diffuseName = texPath + materials[shapes[s].mesh.material_ids[f]].diffuse_texname;
-        specularName = texPath + materials[shapes[s].mesh.material_ids[f]].specular_texname;
-        normalName = texPath + materials[shapes[s].mesh.material_ids[f]].normal_texname;
-        shininess = materials[shapes[s].mesh.material_ids[f]].shininess;
+        const auto& material = materials[shapes[s].mesh.material_ids[f]];
+        name = material.name;
+        
+        albedoName = texPath + material.diffuse_texname;
+        roughnessName = texPath + material.roughness_texname;
+        metalnessName = material.metallic_texname;
+        normalName = texPath + material.normal_texname;
+        ambientOcclusionName = material.ambient_texname;
       }
 
       // push material and cut shape if material changes partway through
@@ -198,7 +203,8 @@ MeshDescriptor LoadObjBase(const std::string& path,
 
 
         //std::cout << "Creating material: " << prevName << std::endl;
-        materialManager.MakeMaterial(prevName, diffuseName, specularName, normalName, shininess);
+        materialManager.MakeMaterial(prevName, albedoName, 
+          roughnessName, metalnessName, normalName, ambientOcclusionName);
 
         uint32_t currentVertexIndex = 0;
         std::unordered_map<Vertex, uint32_t> verticesUnique;
