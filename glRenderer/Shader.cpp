@@ -11,9 +11,9 @@ class IncludeHandler : public shaderc::CompileOptions::IncluderInterface
 public:
   virtual shaderc_include_result* GetInclude(
     const char* requested_source,
-    shaderc_include_type type,
-    const char* requesting_source,
-    size_t include_depth)
+    [[maybe_unused]] shaderc_include_type type,
+    [[maybe_unused]] const char* requesting_source,
+    [[maybe_unused]] size_t include_depth)
   {
     auto* data = new shaderc_include_result;
     
@@ -42,7 +42,7 @@ private:
   std::string* source_name{};
 };
 
-Shader::Shader(std::vector<ShaderInfo> shaders)
+Shader::Shader(std::vector<ShaderInfo> shaderInfos)
 {
   const std::unordered_map<GLenum, shaderc_shader_kind> gl2shadercTypes =
   {
@@ -66,7 +66,7 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
   options.SetAutoBindUniforms(true);
 
   std::vector<GLuint> shaderIDs;
-  for (auto& [shaderPath, shaderType, replace] : shaders)
+  for (auto& [shaderPath, shaderType, replace] : shaderInfos)
   {
 #if USE_SPIRV
     // preprocess shader
@@ -126,13 +126,13 @@ Shader::Shader(std::vector<ShaderInfo> shaders)
   {
     glGetProgramInfoLog(programID, 512, NULL, infoLog);
     printf("Failed to link shader program.\nFiles:\n");
-    for (auto [path, type, repl] : shaders)
+    for (auto [path, type, repl] : shaderInfos)
       std::printf("%s\n", path.c_str());
     std::cout << "Failed to link shader program\n" << infoLog << std::endl;
   }
 
   std::vector<std::string_view> strs;
-  for (const auto& [shaderPath, shaderType, replace] : shaders)
+  for (const auto& [shaderPath, shaderType, replace] : shaderInfos)
   {
     strs.push_back(shaderPath);
   }

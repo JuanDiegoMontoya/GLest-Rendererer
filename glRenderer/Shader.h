@@ -71,7 +71,7 @@ public:
   void Set1FloatArray(std::string uniform, std::span<const float> value)
   {
     assert(Uniforms.find(uniform) != Uniforms.end());
-    glProgramUniform1fv(programID, Uniforms[uniform], value.size(), value.data());
+    glProgramUniform1fv(programID, Uniforms[uniform], static_cast<GLsizei>(value.size()), value.data());
   }
   void Set1FloatArray(std::string uniform, const float* value, GLsizei count)
   {
@@ -81,22 +81,22 @@ public:
   void Set2FloatArray(std::string uniform, std::span<const glm::vec2> value)
   {
     assert(Uniforms.find(uniform) != Uniforms.end());
-    glProgramUniform2fv(programID, Uniforms[uniform], value.size(), glm::value_ptr(value.front()));
+    glProgramUniform2fv(programID, Uniforms[uniform], static_cast<GLsizei>(value.size()), glm::value_ptr(value.front()));
   }
   void Set3FloatArray(std::string uniform, std::span<const glm::vec3> value)
   {
     assert(Uniforms.find(uniform) != Uniforms.end());
-    glProgramUniform3fv(programID, Uniforms[uniform], value.size(), glm::value_ptr(value.front()));
+    glProgramUniform3fv(programID, Uniforms[uniform], static_cast<GLsizei>(value.size()), glm::value_ptr(value.front()));
   }
   void Set4FloatArray(std::string uniform, std::span<const glm::vec4> value)
   {
     assert(Uniforms.find(uniform) != Uniforms.end());
-    glProgramUniform4fv(programID, Uniforms[uniform], value.size(), glm::value_ptr(value.front()));
+    glProgramUniform4fv(programID, Uniforms[uniform], static_cast<GLsizei>(value.size()), glm::value_ptr(value.front()));
   }
   void SetIntArray(std::string uniform, std::span<const int> value)
   {
     assert(Uniforms.find(uniform) != Uniforms.end());
-    glProgramUniform1iv(programID, Uniforms[uniform], value.size(), value.data());
+    glProgramUniform1iv(programID, Uniforms[uniform], static_cast<GLsizei>(value.size()), value.data());
   }
   void SetVec2(std::string uniform, const glm::vec2& value)
   {
@@ -156,7 +156,7 @@ public:
   void SetHandleArray(std::string uniform, std::span<const uint64_t> handles)
   {
     assert(Uniforms.find(uniform) != Uniforms.end());
-    glProgramUniformHandleui64vARB(programID, Uniforms[uniform], handles.size(), handles.data());
+    glProgramUniformHandleui64vARB(programID, Uniforms[uniform], static_cast<GLsizei>(handles.size()), handles.data());
   }
 
   // list of all shader programs

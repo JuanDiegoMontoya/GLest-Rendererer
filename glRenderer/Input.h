@@ -2,7 +2,6 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <span>
-#include <variant>
 
 constexpr int BUTTON_COUNT = GLFW_KEY_LAST;
 constexpr int MOUSE_BUTTON_STATES = GLFW_MOUSE_BUTTON_LAST;
@@ -18,10 +17,6 @@ struct InputKey { Key key{}; };
 struct InputMouseButton { MouseButton button; };
 struct InputMouseScroll { bool yaxis{ false }; };
 struct InputMousePos { bool yaxis{ false }; };
-
-using InputActionType = std::variant<InputKey, InputMouseButton, InputMouseScroll>;
-using InputAxis_t = std::variant<InputKey, InputMouseButton, InputMouseScroll, InputMousePos>;
-struct InputAxisType { float scale{ 1 }; InputAxis_t type; };
 
 class Input
 {

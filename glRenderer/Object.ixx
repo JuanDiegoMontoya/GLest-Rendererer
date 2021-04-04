@@ -1,10 +1,14 @@
-#pragma once
+module;
+
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <vector>
-#include "Mesh.h"
 
-struct Transform
+export module Object;
+
+import Mesh;
+
+export struct Transform
 {
   glm::mat4 GetModelMatrix() const
   {
@@ -25,19 +29,20 @@ struct Transform
   glm::vec3 scale{};
 };
 
-struct ObjectMeshed
+export struct ObjectMeshed
 {
   Transform transform;
   std::vector<Mesh*> meshes;
 };
 
-struct ObjectBatched
+export struct ObjectBatched
 {
   Transform transform;
   std::vector<MeshInfo> meshes;
 };
 
-struct alignas(16) ObjectUniforms // sent to GPU
+#pragma warning(disable : 4324; suppress : 4324)
+export struct alignas(16) ObjectUniforms // sent to GPU
 {
   glm::mat4 modelMatrix{};
   glm::mat4 normalMatrix{};

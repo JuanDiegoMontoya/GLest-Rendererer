@@ -1,16 +1,21 @@
+module;
+
+#include <string>
+#include <span>
 #include <glad/glad.h>
-#include "RendererHelpers.h"
 #include <iostream>
 #include "Shader.h"
 
-void GLAPIENTRY
-GLerrorCB(GLenum source,
-  GLenum type,
-  GLuint id,
-  GLenum severity,
-  GLsizei length,
-  const GLchar* message,
-  [[maybe_unused]] const void* userParam)
+export module RendererHelpers;
+
+export void GLAPIENTRY
+  GLerrorCB(GLenum source,
+    GLenum type,
+    GLuint id,
+    GLenum severity,
+    GLsizei length,
+    const GLchar* message,
+    [[maybe_unused]] const void* userParam)
 {
   // ignore non-significant error/warning codes
   if (id == 131169 || id == 131185 || id == 131218 || id == 131204
@@ -53,7 +58,7 @@ GLerrorCB(GLenum source,
   std::cout << std::endl;
 }
 
-void CompileShaders()
+export void CompileShaders()
 {
   Shader::shaders["gBuffer"].emplace(Shader(
     {
@@ -193,7 +198,7 @@ void CompileShaders()
     }));
 }
 
-void drawFSTexture(GLuint texID)
+export void drawFSTexture(GLuint texID)
 {
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
@@ -205,58 +210,61 @@ void drawFSTexture(GLuint texID)
   glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
-void blurTextureBase(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, 
-  GLint passes, GLint strength, std::span<std::string> shaderNames, GLenum imageFormat)
+namespace // detail
 {
-  if (strength > shaderNames.size() || strength <= 1)
+  void blurTextureBase(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height,
+    GLint passes, GLint strength, std::span<std::string> shaderNames, GLenum imageFormat)
   {
-    return;
-  }
-  
-  auto& shader = Shader::shaders[shaderNames[strength - 1]];
-  shader->Bind();
-  shader->SetIVec2("u_texSize", width, height);
-  shader->SetInt("u_inTex", 0);
-  shader->SetInt("u_outTex", 0);
+    if (strength > shaderNames.size() || strength <= 1)
+    {
+      return;
+    }
 
-  const int X_SIZE = 8;
-  const int Y_SIZE = 8;
-  const int xgroups = (width + X_SIZE - 1) / X_SIZE;
-  const int ygroups = (height + Y_SIZE - 1) / Y_SIZE;
+    auto& shader = Shader::shaders[shaderNames[strength - 1]];
+    shader->Bind();
+    shader->SetIVec2("u_texSize", width, height);
+    shader->SetInt("u_inTex", 0);
+    shader->SetInt("u_outTex", 0);
 
-  bool horizontal = false;
-  for (int i = 0; i < passes * 2; i++)
-  {
-    // read from inTex on first pass only
-    glBindTextureUnit(0, inOutTex);
-    glBindImageTexture(0, intermediateTexture, 0, false, 0, GL_WRITE_ONLY, imageFormat);
-    shader->SetBool("u_horizontal", horizontal);
-    glDispatchCompute(xgroups, ygroups, 1);
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-    std::swap(inOutTex, intermediateTexture);
-    horizontal = !horizontal;
+    const int X_SIZE = 8;
+    const int Y_SIZE = 8;
+    const int xgroups = (width + X_SIZE - 1) / X_SIZE;
+    const int ygroups = (height + Y_SIZE - 1) / Y_SIZE;
+
+    bool horizontal = false;
+    for (int i = 0; i < passes * 2; i++)
+    {
+      // read from inTex on first pass only
+      glBindTextureUnit(0, inOutTex);
+      glBindImageTexture(0, intermediateTexture, 0, false, 0, GL_WRITE_ONLY, imageFormat);
+      shader->SetBool("u_horizontal", horizontal);
+      glDispatchCompute(xgroups, ygroups, 1);
+      glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+      std::swap(inOutTex, intermediateTexture);
+      horizontal = !horizontal;
+    }
   }
 }
 
-void blurTextureRGBA32f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
+export void blurTextureRGBA32f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
 {
   std::string strs[] = { "gaussianRGBA32f_blur1","gaussianRGBA32f_blur2", "gaussianRGBA32f_blur3", "gaussianRGBA32f_blur4", "gaussianRGBA32f_blur5", "gaussianRGBA32f_blur6" };
   blurTextureBase(inOutTex, intermediateTexture, width, height, passes, strength, strs, GL_RGBA32F);
 }
 
-void blurTextureRGBA16f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
+export void blurTextureRGBA16f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
 {
   std::string strs[] = { "gaussianRGBA16f_blur1","gaussianRGBA16f_blur2", "gaussianRGBA16f_blur3", "gaussianRGBA16f_blur4", "gaussianRGBA16f_blur5", "gaussianRGBA16f_blur6" };
   blurTextureBase(inOutTex, intermediateTexture, width, height, passes, strength, strs, GL_RGBA16F);
 }
 
-void blurTextureRG32f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
+export void blurTextureRG32f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
 {
   std::string strs[] = { "gaussian_blur1","gaussian_blur2", "gaussian_blur3", "gaussian_blur4", "gaussian_blur5", "gaussian_blur6" };
   blurTextureBase(inOutTex, intermediateTexture, width, height, passes, strength, strs, GL_RG32F);
 }
 
-void blurTextureR32f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
+export void blurTextureR32f(GLuint inOutTex, GLuint intermediateTexture, GLint width, GLint height, GLint passes, GLint strength)
 {
   std::string strs[] = { "gaussian32f_blur1", "gaussian32f_blur2", "gaussian32f_blur3", "gaussian32f_blur4", "gaussian32f_blur5", "gaussian32f_blur6" };
   blurTextureBase(inOutTex, intermediateTexture, width, height, passes, strength, strs, GL_R32F);

@@ -1,10 +1,39 @@
-#include "Texture.h"
+module;
+
+#include <string>
+#include <glm/glm.hpp>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
-#include <string>
 #include <iostream>
 #include <filesystem>
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
+
+export module GPU.Texture;
+
+export class Texture2D
+{
+public:
+  Texture2D(std::string_view path, bool isSRGB, bool genMips);
+  Texture2D(const Texture2D& rhs) = delete;
+  Texture2D& operator=(Texture2D&& rhs) noexcept;
+  Texture2D(Texture2D&& rhs) noexcept;
+  ~Texture2D();
+
+  void Bind(unsigned slot = 0) const;
+  unsigned GetID() const { return rendererID_; }
+  uint64_t GetBindlessHandle() const { return bindlessHandle_; }
+  bool Valid() const { return rendererID_ != 0; }
+
+  glm::ivec2 GetDimensions() const { return dim_; }
+
+private:
+  unsigned rendererID_{};
+  uint64_t bindlessHandle_{};
+  glm::ivec2 dim_{};
+};
+
 
 Texture2D::Texture2D(std::string_view path, bool isSRGB, bool genMips)
 {
@@ -38,7 +67,7 @@ Texture2D::Texture2D(std::string_view path, bool isSRGB, bool genMips)
   GLuint levels = 1;
   if (genMips)
   {
-    levels = glm::ceil(glm::log2((float)glm::min(dim_.x, dim_.y)));
+    levels = (GLuint)glm::ceil(glm::log2((float)glm::min(dim_.x, dim_.y)));
   }
   glTextureStorage2D(rendererID_, levels, isSRGB ? GL_SRGB8_ALPHA8 : GL_RGBA8, dim_.x, dim_.y);
   glTextureSubImage2D(
@@ -80,6 +109,6 @@ Texture2D::~Texture2D()
 }
 
 void Texture2D::Bind(unsigned slot) const
-{
-  glBindTextureUnit(slot, rendererID_);
-}
+  {
+    glBindTextureUnit(slot, rendererID_);
+  }

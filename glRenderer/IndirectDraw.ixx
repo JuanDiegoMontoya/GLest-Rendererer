@@ -1,6 +1,10 @@
-#pragma once
+module;
 
-struct DrawElementsIndirectCommand
+#include <glad/glad.h>
+
+export module GPU.IndirectDraw;
+
+export struct DrawElementsIndirectCommand
 {
   GLuint count{ 0 };        // num indices in draw call
   GLuint instanceCount{ 0 };// num instances in draw call
@@ -9,7 +13,7 @@ struct DrawElementsIndirectCommand
   GLuint baseInstance{ 0 }; // first instance to draw (position in instanced buffer)
 };
 
-struct DrawArraysIndirectCommand
+export struct DrawArraysIndirectCommand
 {
   GLuint count{ 0 };
   GLuint instanceCount{ 0 };

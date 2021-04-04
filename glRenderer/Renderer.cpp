@@ -1,17 +1,16 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
-
 #include "Renderer.h"
 #include "Shader.h"
 #include "Input.h"
-#include "Utilities.h"
-#include "IndirectDraw.h"
-
 #include <iostream>
 #include <stdexcept>
 #include <cstdlib>
 #include <algorithm>
+
+import Utilities;
+import GPU.IndirectDraw;
 
 void Renderer::Run()
 {
@@ -52,17 +51,7 @@ void Renderer::InitGL()
   glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
   glDebugMessageCallback(GLerrorCB, nullptr);
 
-  glViewport(0, 0, WIDTH, HEIGHT);
   glEnable(GL_MULTISAMPLE); // for shadows
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
-  glFrontFace(GL_CCW);
-
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
 
   glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &deviceAnisotropy);
 }
@@ -72,7 +61,6 @@ void Renderer::InitImGui()
   const char* glsl_version = "#version 460";
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
-  ImGuiIO& io = ImGui::GetIO();
   ImGui::StyleColorsDark();
   ImGui_ImplGlfw_InitForOpenGL(window, false);
   ImGui_ImplOpenGL3_Init(glsl_version);
@@ -105,7 +93,7 @@ void Renderer::MainLoop()
   float accum = 0;
   while (!glfwWindowShouldClose(window))
   {
-    const float dt = timer.elapsed();
+    const float dt = static_cast<float>(timer.elapsed());
     accum += dt;
     if (accum > 1.0f)
     {
@@ -185,7 +173,7 @@ void Renderer::MainLoop()
       drawIndirectBuffer->Bind(GL_DRAW_INDIRECT_BUFFER);
       glVertexArrayVertexBuffer(vao, 0, vertexBuffer->GetBufferHandle(), 0, sizeof(Vertex));
       glVertexArrayElementBuffer(vao, indexBuffer->GetBufferHandle());
-      glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, uniforms.size(), sizeof(DrawElementsIndirectCommand));
+      glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, static_cast<GLsizei>(uniforms.size()), sizeof(DrawElementsIndirectCommand));
     }
 
     GLuint filteredTex{};
@@ -766,7 +754,7 @@ void Renderer::CreateScene()
   CreateLocalLights();
 
   // setup geometry
-  envMap_hdri = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.hdr", true, false);
+  envMap_hdri = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.hdr", false, false);
   envMap_irradiance = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.irr.hdr", true, false);
   sphere = std::move(LoadObjMesh("Resources/Models/goodSphere.obj", materialManager)[0]);
   auto sphereBatched = LoadObjBatch("Resources/Models/goodSphere.obj", materialManager, *vertexBuffer, *indexBuffer)[0];
@@ -783,22 +771,6 @@ void Renderer::CreateScene()
       break;
     }
   }
-
-  // setup material buffer
-  std::vector<BindlessMaterial> tempMats;
-  for (const auto& matp : tempMatsStr)
-  {
-    BindlessMaterial bm
-    {
-      .albedoHandle = matp.second.albedoTex->GetBindlessHandle(),
-      .roughnessHandle = matp.second.roughnessTex->GetBindlessHandle(),
-      .metalnessHandle = matp.second.metalnessTex->GetBindlessHandle(),
-      .normalHandle = matp.second.normalTex->GetBindlessHandle(),
-      .ambientOcclusionHandle = matp.second.ambientOcclusionTex->GetBindlessHandle(),
-    };
-    tempMats.push_back(bm);
-  }
-  materialsBuffer = std::make_unique<StaticBuffer>(tempMats.data(), tempMats.size() * sizeof(BindlessMaterial), 0);
 
   ObjectBatched terrain2b;
   for (auto& mesh : terrain2)
@@ -827,27 +799,7 @@ void Renderer::CreateScene()
     batchedObjects.push_back(a);
   }
 
-  // setup indirect draw buffer
-  std::vector<DrawElementsIndirectCommand> cmds;
-  GLuint baseInstance = 0;
-  for (const auto& obj : batchedObjects)
-  {
-    for (const auto& mesh : obj.meshes)
-    {
-      const auto& vtxInfo = vertexBuffer->GetAlloc(mesh.verticesAllocHandle);
-      const auto& idxInfo = indexBuffer->GetAlloc(mesh.indicesAllocHandle);
-      DrawElementsIndirectCommand cmd
-      {
-        .count = idxInfo.size / sizeof(uint32_t),
-        .instanceCount = 1,
-        .firstIndex = idxInfo.offset / sizeof(uint32_t),
-        .baseVertex = vtxInfo.offset / sizeof(Vertex),
-        .baseInstance = baseInstance++,
-      };
-      cmds.push_back(cmd);
-    }
-  }
-  drawIndirectBuffer = std::make_unique<StaticBuffer>(cmds.data(), sizeof(DrawElementsIndirectCommand) * cmds.size(), 0);
+  SetupBuffers();
 }
 
 void Renderer::Cleanup()
@@ -1115,5 +1067,42 @@ void Renderer::LoadScene2()
 
 void Renderer::SetupBuffers()
 {
+  // setup material buffer
+  auto tempMatsStr = materialManager.GetLinearMaterials();
+  std::vector<BindlessMaterial> tempMats;
+  for (const auto& matp : tempMatsStr)
+  {
+    BindlessMaterial bm
+    {
+      .albedoHandle = matp.second.albedoTex->GetBindlessHandle(),
+      .roughnessHandle = matp.second.roughnessTex->GetBindlessHandle(),
+      .metalnessHandle = matp.second.metalnessTex->GetBindlessHandle(),
+      .normalHandle = matp.second.normalTex->GetBindlessHandle(),
+      .ambientOcclusionHandle = matp.second.ambientOcclusionTex->GetBindlessHandle(),
+    };
+    tempMats.push_back(bm);
+  }
+  materialsBuffer = std::make_unique<StaticBuffer>(tempMats.data(), tempMats.size() * sizeof(BindlessMaterial), 0);
 
+  // setup indirect draw buffer
+  std::vector<DrawElementsIndirectCommand> cmds;
+  GLuint baseInstance = 0;
+  for (const auto& obj : batchedObjects)
+  {
+    for (const auto& mesh : obj.meshes)
+    {
+      const auto& vtxInfo = vertexBuffer->GetAlloc(mesh.verticesAllocHandle);
+      const auto& idxInfo = indexBuffer->GetAlloc(mesh.indicesAllocHandle);
+      DrawElementsIndirectCommand cmd
+      {
+        .count = idxInfo.size / sizeof(uint32_t),
+        .instanceCount = 1,
+        .firstIndex = idxInfo.offset / sizeof(uint32_t),
+        .baseVertex = vtxInfo.offset / sizeof(Vertex),
+        .baseInstance = baseInstance++,
+      };
+      cmds.push_back(cmd);
+    }
+  }
+  drawIndirectBuffer = std::make_unique<StaticBuffer>(cmds.data(), sizeof(DrawElementsIndirectCommand) * cmds.size(), 0);
 }

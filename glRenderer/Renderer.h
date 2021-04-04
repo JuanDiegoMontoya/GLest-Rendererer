@@ -1,18 +1,21 @@
 #pragma once
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-
-#include "RendererHelpers.h"
-#include "Mesh.h"
-#include "Object.h"
-#include "Light.h"
-#include "Camera.h"
-#include "Texture.h"
-#include "StaticBuffer.h"
-#include "DynamicBuffer.h"
-
+#include <glm/glm.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <vector>
 #include <memory>
+#include <string>
+#include <unordered_map>
+
+import Mesh;
+import Camera;
+import RendererHelpers;
+import Object;
+import Light;
+import GPU.Texture;
+import GPU.StaticBuffer;
+import GPU.DynamicBuffer;
 
 #define SHADOW_METHOD_PCF 0
 #define SHADOW_METHOD_VSM 1
@@ -52,8 +55,8 @@ private:
   void SetupBuffers(); // draw commands, materials
 
   // pbr stuff
-  std::unique_ptr<Texture2D> envMap_hdri{};
-  std::unique_ptr<Texture2D> envMap_irradiance{};
+  std::unique_ptr<Texture2D> envMap_hdri;
+  std::unique_ptr<Texture2D> envMap_irradiance;
 
   // scene info
   Camera cam;
@@ -67,13 +70,13 @@ private:
   const int max_vertices = 5'000'000;
   std::unique_ptr<DynamicBuffer> vertexBuffer;
   std::unique_ptr<DynamicBuffer> indexBuffer;
-  std::unique_ptr<StaticBuffer> lightSSBO{};
+  std::unique_ptr<StaticBuffer> lightSSBO;
   std::unique_ptr<StaticBuffer> materialsBuffer; // material info
   std::unique_ptr<StaticBuffer> drawIndirectBuffer; // DrawElementsIndirectCommand
   MaterialManager materialManager;
 
   // volumetric stuff
-  std::unique_ptr<Texture2D> bluenoiseTex{};
+  std::unique_ptr<Texture2D> bluenoiseTex;
   GLuint volumetricsFbo{}, volumetricsTex{}, volumetricsTexBlur{};
   int VOLUMETRIC_BLUR_PASSES = 2;
   int VOLUMETRIC_BLUR_STRENGTH = 2;
@@ -125,7 +128,7 @@ private:
   GLuint shadowFbo{}, shadowDepth{};
   GLuint SHADOW_WIDTH = 1024;
   GLuint SHADOW_HEIGHT = 1024;
-  GLuint SHADOW_LEVELS = glm::ceil(glm::log2((float)glm::max(SHADOW_WIDTH, SHADOW_HEIGHT)));
+  GLuint SHADOW_LEVELS = (GLuint)glm::ceil(glm::log2((float)glm::max(SHADOW_WIDTH, SHADOW_HEIGHT)));
   int BLUR_PASSES = 1;
   int BLUR_STRENGTH = 5;
   int shadow_method = SHADOW_METHOD_ESM;

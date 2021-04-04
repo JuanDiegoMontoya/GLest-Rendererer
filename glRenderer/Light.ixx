@@ -1,8 +1,13 @@
-#pragma once
+module;
+
 #include <glm/glm.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+export module Light;
 
 // padded to send to GPU
-struct PointLight
+export struct PointLight
 {
   glm::vec4 diffuse;
   glm::vec4 position;
@@ -31,7 +36,7 @@ struct PointLight
   }
 };
 
-struct DirLight
+export struct DirLight
 {
   glm::vec3 ambient;
   glm::vec3 diffuse;
@@ -39,7 +44,7 @@ struct DirLight
   glm::vec3 direction;
 };
 
-inline glm::mat4 MakeLightMatrix(const DirLight& light, glm::vec3 eye, glm::vec2 dim, glm::vec2 depthRange)
+export glm::mat4 MakeLightMatrix(const DirLight& light, glm::vec3 eye, glm::vec2 dim, glm::vec2 depthRange)
 {
   glm::mat4 lightView = glm::lookAt(
     eye, eye + light.direction, glm::vec3(0, 1, 0));

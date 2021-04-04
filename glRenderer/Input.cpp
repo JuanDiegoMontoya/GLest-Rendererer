@@ -68,9 +68,9 @@ bool Input::IsMouseReleased(MouseButton key)
   return mouseButtonStates[key] == KeyState::released;
 }
 
-void Input::keypress_cb([[maybe_unused]] GLFWwindow* window, int key, int scancode, int action, [[maybe_unused]] int mods)
+void Input::keypress_cb([[maybe_unused]] GLFWwindow* wnd, int key, int scancode, int action, [[maybe_unused]] int mods)
 {
-  ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+  ImGui_ImplGlfw_KeyCallback(wnd, key, scancode, action, mods);
   ImGuiIO& io = ImGui::GetIO();
   if (action == GLFW_PRESS)
     io.KeysDown[key] = true;
@@ -106,7 +106,7 @@ void Input::keypress_cb([[maybe_unused]] GLFWwindow* window, int key, int scanco
 #endif
 }
 #include <iostream>
-void Input::mouse_pos_cb([[maybe_unused]] GLFWwindow* window, double xpos, double ypos)
+void Input::mouse_pos_cb([[maybe_unused]] GLFWwindow* wnd, double xpos, double ypos)
 {
   static bool firstMouse = true;
 
@@ -134,9 +134,9 @@ void Input::mouse_pos_cb([[maybe_unused]] GLFWwindow* window, double xpos, doubl
 #endif
 }
 
-void Input::mouse_scroll_cb([[maybe_unused]] GLFWwindow* window, double xoffset, double yoffset)
+void Input::mouse_scroll_cb([[maybe_unused]] GLFWwindow* wnd, double xoffset, double yoffset)
 {
-  ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+  ImGui_ImplGlfw_ScrollCallback(wnd, xoffset, yoffset);
   scrollOffset.x = static_cast<float>(xoffset);
   scrollOffset.y = static_cast<float>(yoffset);
 
@@ -145,9 +145,9 @@ void Input::mouse_scroll_cb([[maybe_unused]] GLFWwindow* window, double xoffset,
 #endif
 }
 
-void Input::mouse_button_cb(GLFWwindow* window, int button, int action, int mods)
+void Input::mouse_button_cb(GLFWwindow* wnd, int button, int action, int mods)
 {
-  ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+  ImGui_ImplGlfw_MouseButtonCallback(wnd, button, action, mods);
   
   switch (action)
   {
@@ -170,15 +170,15 @@ void Input::mouse_button_cb(GLFWwindow* window, int button, int action, int mods
 #endif
 }
 
-void Input::Init(GLFWwindow* window)
+void Input::Init(GLFWwindow* wnd)
 {
-  Input::window = window;
-  glfwSetKeyCallback(window, keypress_cb);
-  glfwSetCursorPosCallback(window, mouse_pos_cb);
-  glfwSetScrollCallback(window, mouse_scroll_cb);
-  glfwSetMouseButtonCallback(window, mouse_button_cb);
+  Input::window = wnd;
+  glfwSetKeyCallback(wnd, keypress_cb);
+  glfwSetCursorPosCallback(wnd, mouse_pos_cb);
+  glfwSetScrollCallback(wnd, mouse_scroll_cb);
+  glfwSetMouseButtonCallback(wnd, mouse_button_cb);
 
-  glfwSetCharCallback(window, ImGui_ImplGlfw_CharCallback);
+  glfwSetCharCallback(wnd, ImGui_ImplGlfw_CharCallback);
 }
 
 void Input::SetCursorVisible(bool state)

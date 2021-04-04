@@ -100,6 +100,9 @@
 /// - <a href="modules.html">GLM API documentation</a>
 /// - <a href="https://github.com/g-truc/glm/blob/master/manual.md">GLM Manual</a>
 
+// USER DEFINES
+#define GLM_FORCE_SILENT_WARNINGS
+
 #include "detail/_fixes.hpp"
 
 #include "detail/setup.hpp"

@@ -1,24 +1,36 @@
-#include "Mesh.h"
-#include <iostream>
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tinyobjloader/tiny_obj_loader.h>
-#include <glad/glad.h>
-#include "Texture.h"
-#include <map>
-#include <unordered_map>
+module;
+
+#include <vector>
+#include <string>
 #include <algorithm>
+#include <iostream>
+#include <unordered_map>
+#include <optional>
+#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
+#include <glad/glad.h>
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tinyobjloader/tiny_obj_loader.h>
 
-inline void hash_combine(std::size_t& seed) {}
+export module Mesh;
 
-template <typename T, typename... Rest>
-inline void hash_combine(std::size_t& seed, const T& v, Rest... rest)
+import Utilities;
+import Material;
+import GPU.DynamicBuffer;
+
+export struct Vertex
 {
-  std::hash<T> hasher;
-  seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-  hash_combine(seed, rest...);
-}
+  glm::vec3 position{};
+  glm::vec3 normal{};
+  glm::vec2 uv{};
+  glm::vec3 tangent{};
+
+  bool operator==(const Vertex& v) const&
+  {
+    return position == v.position && normal == v.normal && uv == v.uv;
+  }
+};
 
 namespace std
 {
@@ -36,20 +48,66 @@ namespace std
   };
 }
 
-Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices, const Material& mat)
-  : vertexCount(indices.size()), material(mat)
+export class Mesh
 {
-  glCreateBuffers(1, &vboID);
-  glCreateBuffers(1, &eboID);
-  glNamedBufferStorage(vboID, vertices.size() * sizeof(Vertex), vertices.data(), 0);
-  glNamedBufferStorage(eboID, indices.size() * sizeof(uint32_t), indices.data(), 0);
-}
+public:
+  Mesh() {}
+  
+  Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices, const Material& mat)
+    : vertexCount(indices.size()), material(mat)
+  {
+    glCreateBuffers(1, &vboID);
+    glCreateBuffers(1, &eboID);
+    glNamedBufferStorage(vboID, vertices.size() * sizeof(Vertex), vertices.data(), 0);
+    glNamedBufferStorage(eboID, indices.size() * sizeof(uint32_t), indices.data(), 0);
+  }
 
-Mesh::~Mesh()
+  ~Mesh()
+  {
+    glDeleteBuffers(1, &vboID);
+    glDeleteBuffers(1, &eboID);
+  }
+
+  Mesh(Mesh&& other) noexcept : material(other.material)
+  {
+    this->vboID = std::exchange(other.vboID, 0);
+    this->eboID = std::exchange(other.eboID, 0);
+    this->vertexCount = std::exchange(other.vertexCount, 0);
+  }
+  Mesh& operator=(Mesh&& other) noexcept
+  {
+    if (&other == this) return *this;
+    Mesh::~Mesh();
+    return *new(this) Mesh(std::move(other));
+  }
+  unsigned GetVBOID() const { return vboID; }
+  unsigned GetEBOID() const { return eboID; }
+  size_t GetVertexCount() const { return vertexCount; }
+  const Material& GetMaterial() const { return material; }
+
+private:
+  //std::vector<Vertex> vertices;
+  unsigned vboID{};
+  unsigned eboID{};
+  size_t vertexCount{};
+  Material material{};
+};
+
+// Batch/bindless rendering
+export struct MeshInfo
 {
-  glDeleteBuffers(1, &vboID);
-  glDeleteBuffers(1, &eboID);
-}
+  uint64_t verticesAllocHandle{};
+  uint64_t indicesAllocHandle{};
+  std::string materialName{};
+  uint32_t materialIndex{};
+};
+
+export struct MeshDescriptor
+{
+  std::vector<std::vector<Vertex>> vertices;
+  std::vector<std::vector<uint32_t>> indices;
+  std::vector<std::string> materials;
+};
 
 MeshDescriptor LoadObjBase(const std::string& path,
   MaterialManager& materialManager)
@@ -176,12 +234,11 @@ MeshDescriptor LoadObjBase(const std::string& path,
       std::string metalnessName;
       std::string normalName;
       std::string ambientOcclusionName;
-      float shininess = 1.0f;
       if (!materials.empty())
       {
         const auto& material = materials[shapes[s].mesh.material_ids[f]];
         name = material.name;
-        
+
         albedoName = texPath + material.diffuse_texname;
         roughnessName = texPath + material.roughness_texname;
         metalnessName = material.metallic_texname;
@@ -203,7 +260,7 @@ MeshDescriptor LoadObjBase(const std::string& path,
 
 
         //std::cout << "Creating material: " << prevName << std::endl;
-        materialManager.MakeMaterial(prevName, albedoName, 
+        materialManager.MakeMaterial(prevName, albedoName,
           roughnessName, metalnessName, normalName, ambientOcclusionName);
 
         uint32_t currentVertexIndex = 0;
@@ -242,7 +299,7 @@ MeshDescriptor LoadObjBase(const std::string& path,
   return meshDescriptor;
 }
 
-std::vector<Mesh> LoadObjMesh(const std::string& path,
+export std::vector<Mesh> LoadObjMesh(const std::string& path,
   MaterialManager& materialManager)
 {
   std::vector<Mesh> meshes;
@@ -258,7 +315,7 @@ std::vector<Mesh> LoadObjMesh(const std::string& path,
   return meshes;
 }
 
-std::vector<MeshInfo> LoadObjBatch(const std::string& path,
+export std::vector<MeshInfo> LoadObjBatch(const std::string& path,
   MaterialManager& materialManager,
   DynamicBuffer& vertexBuffer,
   DynamicBuffer& indexBuffer)
