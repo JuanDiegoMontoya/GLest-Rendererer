@@ -11,6 +11,12 @@ struct Material
   uvec2 ambientOcclusionHandle;
 };
 
+layout (location = 1) uniform bool u_materialOverride;
+layout (location = 2) uniform vec3 u_albedoOverride;
+layout (location = 3) uniform float u_roughnessOverride;
+layout (location = 4) uniform float u_metalnessOverride;
+layout (location = 5) uniform float u_ambientOcclusionOverride;
+
 layout (binding = 1, std430) readonly buffer Materials
 {
   Material materials[];
@@ -51,16 +57,26 @@ void main()
   gAlbedo.rgb = color.rgb;
   gAlbedo.a = 1.0; // unused
   gRMA.rgba = vec4(1.0, 0.0, 0.0, 1.0); // sane defaults, gRMA.a is unused
-  if (hasRoughness)
+  if (!u_materialOverride)
   {
-    gRMA[0] = texture(sampler2D(material.roughnessHandle), vTexCoord).r;
+    if (hasRoughness)
+    {
+      gRMA[0] = texture(sampler2D(material.roughnessHandle), vTexCoord).r;
+    }
+    if (hasMetalness)
+    {
+      gRMA[1] = texture(sampler2D(material.metalnessHandle), vTexCoord).r;
+    }
+    if (hasAmbientOcclusion)
+    {
+      gRMA[2] = texture(sampler2D(material.ambientOcclusionHandle), vTexCoord).r;
+    }
   }
-  if (hasMetalness)
+  else
   {
-    gRMA[1] = texture(sampler2D(material.metalnessHandle), vTexCoord).r;
-  }
-  if (hasAmbientOcclusion)
-  {
-    gRMA[2] = texture(sampler2D(material.ambientOcclusionHandle), vTexCoord).r;
+    gAlbedo.rgb = u_albedoOverride;
+    gRMA[0] = u_roughnessOverride;
+    gRMA[1] = u_metalnessOverride;
+    gRMA[2] = u_ambientOcclusionOverride;
   }
 }

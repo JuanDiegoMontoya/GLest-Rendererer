@@ -9,11 +9,11 @@ export module Light;
 // padded to send to GPU
 export struct PointLight
 {
-  glm::vec4 diffuse;
-  glm::vec4 position;
-  float linear;
-  float quadratic;
-  float radiusSquared;
+  glm::vec4 diffuse{};
+  glm::vec4 position{};
+  float linear{};
+  float quadratic{};
+  float radiusSquared{};
   float _padding;
 
   float CalcRadiusSquared(float epsilon) const
@@ -38,10 +38,10 @@ export struct PointLight
 
 export struct DirLight
 {
-  glm::vec3 ambient;
-  glm::vec3 diffuse;
-  glm::vec3 specular;
-  glm::vec3 direction;
+  glm::vec3 ambient{};
+  glm::vec3 diffuse{};
+  glm::vec3 specular{};
+  glm::vec3 direction{};
 };
 
 export glm::mat4 MakeLightMatrix(const DirLight& light, glm::vec3 eye, glm::vec2 dim, glm::vec2 depthRange)
@@ -49,7 +49,7 @@ export glm::mat4 MakeLightMatrix(const DirLight& light, glm::vec3 eye, glm::vec2
   glm::mat4 lightView = glm::lookAt(
     eye, eye + light.direction, glm::vec3(0, 1, 0));
   glm::mat4 lightProj = glm::ortho(
-    -dim.x / 2, dim.x / 2, -dim.y / 2, dim.y / 2, 
+    -dim.x / 2, dim.x / 2, -dim.y / 2, dim.y / 2,
     depthRange.x, depthRange.y);
   return lightProj * lightView;
 }

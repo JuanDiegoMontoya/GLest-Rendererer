@@ -32,14 +32,15 @@ private:
   void InitGL();
   void InitImGui();
   void MainLoop();
-  void CreateScene();
   void Cleanup();
 
   void CreateFramebuffers();
   void CreateVAO();
   void DrawUI();
   void ApplyTonemapping(float dt);
-  void CreateLocalLights();
+  void InitScene();
+  void Scene1Lights();
+  void Scene2Lights();
 
   // common
   GLFWwindow* window{};
@@ -60,20 +61,28 @@ private:
 
   // scene info
   Camera cam;
-  std::vector<PointLight> localLights;
   Mesh sphere;
   std::vector<ObjectBatched> batchedObjects;
+  const int max_vertices = 5'000'000;
+  std::unique_ptr<DynamicBuffer> vertexBuffer;
+  std::unique_ptr<DynamicBuffer> indexBuffer;
+  std::unique_ptr<StaticBuffer> materialsBuffer; // material info
+  std::unique_ptr<StaticBuffer> drawIndirectBuffer; // DrawElementsIndirectCommand
+  MaterialManager materialManager;
+
+  // lighting
+  std::vector<PointLight> localLights;
+  std::unique_ptr<StaticBuffer> lightSSBO;
   float sunPosition = 0;
   DirLight globalLight;
   int numLights = 1000;
   glm::vec2 lightFalloff{ 2, 8 };
-  const int max_vertices = 5'000'000;
-  std::unique_ptr<DynamicBuffer> vertexBuffer;
-  std::unique_ptr<DynamicBuffer> indexBuffer;
-  std::unique_ptr<StaticBuffer> lightSSBO;
-  std::unique_ptr<StaticBuffer> materialsBuffer; // material info
-  std::unique_ptr<StaticBuffer> drawIndirectBuffer; // DrawElementsIndirectCommand
-  MaterialManager materialManager;
+  float lightVolumeThreshold = 0.01f;
+  bool materialOverride = false;
+  glm::vec3 albedoOverride{ 0.129f, 0.643f, 0.921f };
+  float roughnessOverride{ 0.5f };
+  float metalnessOverride{ 1.0f };
+  float ambientOcclusionOverride{ 0.0f };
 
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex;

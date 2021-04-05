@@ -24,9 +24,9 @@ export struct Transform
     return glm::transpose(glm::inverse(glm::mat3(GetModelMatrix())));
   }
 
-  glm::vec3 translation{};
-  glm::quat rotation{1, 0, 0, 0};
-  glm::vec3 scale{};
+  glm::vec3 translation{ 0, 0, 0 };
+  glm::quat rotation{ 1, 0, 0, 0 };
+  glm::vec3 scale{ 1, 1, 1 };
 };
 
 export struct ObjectMeshed

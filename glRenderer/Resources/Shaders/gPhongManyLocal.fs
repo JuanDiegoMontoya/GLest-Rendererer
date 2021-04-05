@@ -88,6 +88,7 @@ void main()
   vec3 L = normalize(vLight.position.xyz - vPos);
   vec3 H = normalize(V + L);
   vec3 F0 = mix(vec3(0.04), albedo, metalness);
+  F0 = clamp(F0, vec3(0.01), vec3(0.95));
   vec3 radiance = vLight.diffuse.rgb * attenuation;
 
   float NDF = D_GGX(N, H, roughness);
@@ -105,7 +106,9 @@ void main()
 
   float cosTheta = max(dot(N, L), 0.0);
   vec3 local = (kD * albedo / M_PI + specular) * radiance * cosTheta;
-  fragColor = vec4(local, 0.0);
+  //fragColor = vec4(local, 0.0);
+  fragColor = vec4(local, 0.0) * smoothstep((vLight.radiusSquared), .4 * (vLight.radiusSquared), (distanceToLightSquared));
+
 
 #if !PBR
   vec3 local = CalcPointLight(vLight, N, V);

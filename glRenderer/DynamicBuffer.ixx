@@ -25,6 +25,8 @@ public:
   // returns true if the memory was able to be freed, false otherwise
   bool Free(uint64_t handle);
 
+  void Clear();
+
   // frees the oldest allocated chunk
   // returns handle to freed chunk, 0 if nothing was freed
   uint64_t FreeOldest();
@@ -42,9 +44,6 @@ public:
 
   struct allocationData
   {
-    //allocationData() = default;
-    //allocationData() {}
-
     uint64_t handle{}; // "pointer"
     double time{};     // time of allocation
     uint32_t flags{};  // GPU flags
@@ -68,9 +67,9 @@ protected:
   // verifies the buffer has no errors, debug only
   void dbgVerify();
 
-  GLuint buffer;
-  uint64_t nextHandle = 1;
-  GLuint numActiveAllocs_ = 0;
+  GLuint buffer{};
+  uint64_t nextHandle{ 1 };
+  GLuint numActiveAllocs_{ 0 };
   const GLuint capacity_; // for fixed size buffers
   Timer timer;
 };
@@ -87,15 +86,7 @@ DynamicBuffer::DynamicBuffer(uint32_t size, uint32_t alignment)
   glCreateBuffers(1, &buffer);
   glNamedBufferStorage(buffer, std::max(uint32_t(1), size), nullptr, GL_DYNAMIC_STORAGE_BIT);
 
-  // make one big null allocation
-  DynamicBuffer::allocationData falloc
-  {
-    .handle = NULL,
-    .time = 0,
-    .offset = 0,
-    .size = size,
-  };
-  allocs_.push_back(falloc);
+  Clear();
 }
 
 DynamicBuffer::~DynamicBuffer()
@@ -170,6 +161,20 @@ bool DynamicBuffer::Free(uint64_t handle)
   --numActiveAllocs_;
   stateChanged();
   return true;
+}
+
+void DynamicBuffer::Clear()
+{
+  numActiveAllocs_ = 0;
+  allocs_.clear();
+  DynamicBuffer::allocationData falloc
+  {
+    .handle = NULL,
+    .time = 0,
+    .offset = 0,
+    .size = capacity_,
+  };
+  allocs_.push_back(falloc);
 }
 
 uint64_t DynamicBuffer::FreeOldest()

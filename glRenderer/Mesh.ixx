@@ -52,7 +52,7 @@ export class Mesh
 {
 public:
   Mesh() {}
-  
+
   Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices, const Material& mat)
     : vertexCount(indices.size()), material(mat)
   {

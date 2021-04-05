@@ -78,12 +78,7 @@ void Renderer::MainLoop()
 
   CompileShaders();
 
-  CreateScene();
-
-  cam.SetPos({ 59.4801331f, 5.45370150f, -6.37605810f });
-  cam.SetPitch(-2.98514581f);
-  cam.SetYaw(175.706055f);
-  cam.Update(0);
+  InitScene();
 
   Input::SetCursorVisible(cursorVisible);
 
@@ -252,6 +247,11 @@ void Renderer::MainLoop()
       auto& gbufBindless = Shader::shaders["gBufferBindless"];
       gbufBindless->Bind();
       gbufBindless->SetMat4("u_viewProj", cam.GetViewProj());
+      gbufBindless->SetBool("u_materialOverride", materialOverride);
+      gbufBindless->SetVec3("u_albedoOverride", albedoOverride);
+      gbufBindless->SetFloat("u_roughnessOverride", roughnessOverride);
+      gbufBindless->SetFloat("u_metalnessOverride", metalnessOverride);
+      gbufBindless->SetFloat("u_ambientOcclusionOverride", ambientOcclusionOverride);
       uniformBuffer.BindBase(GL_SHADER_STORAGE_BUFFER, 0);
       materialsBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 1);
       drawIndirectBuffer->Bind(GL_DRAW_INDIRECT_BUFFER);
@@ -312,9 +312,9 @@ void Renderer::MainLoop()
 
     // skybox pass
     {
-      glBlitNamedFramebuffer(gfbo, hdrfbo, 
-        0, 0, WIDTH, HEIGHT, 
-        0, 0, WIDTH, HEIGHT, 
+      glBlitNamedFramebuffer(gfbo, hdrfbo,
+        0, 0, WIDTH, HEIGHT,
+        0, 0, WIDTH, HEIGHT,
         GL_DEPTH_BUFFER_BIT, GL_NEAREST);
       glEnable(GL_DEPTH_TEST);
       glDepthMask(GL_FALSE);
@@ -529,10 +529,9 @@ void Renderer::MainLoop()
       glfwSetWindowShouldClose(window, true);
     }
 
-    DrawUI();
-
     if (cursorVisible)
     {
+      DrawUI();
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
@@ -683,7 +682,7 @@ void Renderer::CreateFramebuffers()
   {
     throw std::runtime_error("Failed to create MSM framebuffer");
   }
-  
+
   // create texture attachments for gBuffer FBO
   glCreateTextures(GL_TEXTURE_2D, 1, &gAlbedo);
   glTextureStorage2D(gAlbedo, 1, GL_RGBA8, WIDTH, HEIGHT);
@@ -743,63 +742,13 @@ void Renderer::CreateVAO()
   glVertexArrayAttribBinding(vao, 4, 0);
 }
 
-void Renderer::CreateScene()
+void Renderer::InitScene()
 {
-  // setup lighting
-  globalLight.ambient = glm::vec3(.0225f);
-  globalLight.diffuse = glm::vec3(.5f);
   globalLight.direction = glm::normalize(glm::vec3(1, -.5f, 0));
-  globalLight.specular = glm::vec3(.125f);
 
-  CreateLocalLights();
-
-  // setup geometry
-  envMap_hdri = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.hdr", false, false);
-  envMap_irradiance = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.irr.hdr", true, false);
   sphere = std::move(LoadObjMesh("Resources/Models/goodSphere.obj", materialManager)[0]);
-  auto sphereBatched = LoadObjBatch("Resources/Models/goodSphere.obj", materialManager, *vertexBuffer, *indexBuffer)[0];
 
-  //auto terrain2 = LoadObjBatch("Resources/Models/avocado/avocado.obj", materialManager, *vertexBuffer, *indexBuffer);
-  auto terrain2 = LoadObjBatch("Resources/Models/sponza/sponza.obj", materialManager, *vertexBuffer, *indexBuffer);
-  
-  auto tempMatsStr = materialManager.GetLinearMaterials();
-  for (size_t i = 0; i < tempMatsStr.size(); i++)
-  {
-    if (sphereBatched.materialName == tempMatsStr[i].first)
-    {
-      sphereBatched.materialIndex = i;
-      break;
-    }
-  }
-
-  ObjectBatched terrain2b;
-  for (auto& mesh : terrain2)
-  {
-    for (size_t i = 0; i < tempMatsStr.size(); i++)
-    {
-      if (mesh.materialName == tempMatsStr[i].first)
-      {
-        mesh.materialIndex = i;
-        break;
-      }
-    }
-    terrain2b.meshes.push_back(mesh);
-  }
-  terrain2b.transform.scale = glm::vec3(.05f);
-  batchedObjects.push_back(terrain2b);
-
-  const int num_spheres = 5;
-  for (int i = 0; i < num_spheres; i++)
-  {
-    ObjectBatched a;
-    a.meshes = { sphereBatched };
-    a.transform.rotation;
-    a.transform.translation = 2.0f * glm::vec3(glm::cos(glm::two_pi<float>() / num_spheres * i), 1.0f, glm::sin(glm::two_pi<float>() / num_spheres * i));
-    a.transform.scale = glm::vec3(1.0f);
-    batchedObjects.push_back(a);
-  }
-
-  SetupBuffers();
+  LoadScene2();
 }
 
 void Renderer::Cleanup()
@@ -856,8 +805,8 @@ void Renderer::Cleanup()
 
 void Renderer::DrawUI()
 {
+  ImGui::Begin("Volumetrics");
   {
-    ImGui::Begin("Volumetrics");
     ImGui::Checkbox("Enabled", &volumetric_enabled);
     ImGui::Text("Rays");
     ImGui::Separator();
@@ -877,11 +826,11 @@ void Renderer::DrawUI()
     //ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
     //ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Step width", &stepWidth, 0.5f, 2.0f, "%.3f");
-    ImGui::End();
   }
+  ImGui::End();
 
+  ImGui::Begin("Shadows");
   {
-    ImGui::Begin("Shadows");
     ImGui::Text("Method");
     ImGui::RadioButton("PCF", &shadow_method, SHADOW_METHOD_PCF);
     ImGui::SameLine();
@@ -909,11 +858,11 @@ void Renderer::DrawUI()
         glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
       }
     }
-    ImGui::End();
   }
+  ImGui::End();
 
+  ImGui::Begin("Environment");
   {
-    ImGui::Begin("Environment");
     if (ImGui::SliderAngle("Sun angle", &sunPosition, 180, 360))
     {
       globalLight.direction.x = .1f;
@@ -924,33 +873,23 @@ void Renderer::DrawUI()
     ImGui::ColorEdit3("Diffuse", &globalLight.diffuse[0]);
     ImGui::ColorEdit3("Ambient", &globalLight.ambient[0]);
     ImGui::ColorEdit3("Specular", &globalLight.specular[0]);
-    ImGui::SliderInt("Local lights", &numLights, 0, 40000);
-    if (ImGui::SliderFloat2("Light falloff", glm::value_ptr(lightFalloff), 0.01f, 10.0f, "%.3f", 2.0f))
-    {
-      if (lightFalloff.y < lightFalloff.x)
-      {
-        std::swap(lightFalloff.x, lightFalloff.y);
-      }
-    }
-    if (ImGui::Button("Update local lights"))
-    {
-      CreateLocalLights();
-    }
-    ImGui::End();
-  }
 
+    ImGui::SliderFloat("Light Volume Threshold", &lightVolumeThreshold, 0.001f, 0.1f);
+  }
+  ImGui::End();
+
+  ImGui::Begin("Postprocessing");
   {
-    ImGui::Begin("Postprocessing");
     ImGui::SliderFloat("Luminance", &targetLuminance, 0.01f, 1.0f);
     ImGui::SliderFloat("Exposure factor", &exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Adjustment speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Min exposure", &minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Max exposure", &maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
-    ImGui::End();
   }
+  ImGui::End();
 
+  ImGui::Begin("Screen-Space Reflections");
   {
-    ImGui::Begin("Screen-Space Reflections");
     ImGui::Checkbox("Enabled", &ssr_enabled);
     ImGui::SliderFloat("Step size", &ssr_rayStep, 0.01f, 1.0f);
     ImGui::SliderFloat("Min step", &ssr_minRayStep, 0.01f, 1.0f);
@@ -958,11 +897,11 @@ void Renderer::DrawUI()
     ImGui::SliderFloat("Search distance", &ssr_searchDist, 1.0f, 50.0f);
     ImGui::SliderInt("Max steps", &ssr_maxRaySteps, 0, 100);
     ImGui::SliderInt("Binary search steps", &ssr_binarySearchSteps, 0, 10);
-    ImGui::End();
   }
+  ImGui::End();
 
+  ImGui::Begin("View Buffer");
   {
-    ImGui::Begin("View Buffer");
     ImGui::Image((void*)uiViewBuffer, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
     ImGui::RadioButton("gAlbedo", &uiViewBuffer, gAlbedo);
     ImGui::RadioButton("gNormal", &uiViewBuffer, gNormal);
@@ -975,8 +914,72 @@ void Renderer::DrawUI()
     ImGui::RadioButton("volumetricsTex", &uiViewBuffer, volumetricsTex);
     ImGui::RadioButton("postprocessColor", &uiViewBuffer, postprocessColor);
     ImGui::RadioButton("ssrTex", &uiViewBuffer, ssrTex);
-    ImGui::End();
   }
+  ImGui::End();
+
+  ImGui::Begin("Scene");
+  {
+    ImGui::SliderInt("Local lights", &numLights, 0, 40000);
+    if (ImGui::SliderFloat2("Light falloff", glm::value_ptr(lightFalloff), 0.01f, 10.0f, "%.3f", 2.0f))
+    {
+      if (lightFalloff.y < lightFalloff.x)
+      {
+        std::swap(lightFalloff.x, lightFalloff.y);
+      }
+    }
+
+    ImGui::Checkbox("Material Override", &materialOverride);
+    ImGui::ColorEdit3("Albedo Override", &albedoOverride[0]);
+    ImGui::SliderFloat("Roughness Override", &roughnessOverride, 0.0f, 1.0f);
+    ImGui::SliderFloat("Metalness Override", &metalnessOverride, 0.0f, 1.0f);
+
+    if (ImGui::Button("Load Scene 1"))
+    {
+      LoadScene1();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load Scene 2"))
+    {
+      LoadScene2();
+    }
+
+    if (ImGui::Button("Lights: Scene 1"))
+    {
+      Scene1Lights();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Lights: Scene 2"))
+    {
+      Scene2Lights();
+    }
+  }
+  ImGui::End();
+
+  ImGui::Begin("Lights");
+  {
+    for (int i = 0; i < localLights.size(); i++)
+    {
+      std::string id = "##light" + std::to_string(i);
+      PointLight& light = localLights[i];
+
+      bool modified = false;
+      if (ImGui::ColorEdit3(("Diffuse" + id).c_str(), &light.diffuse[0]))
+        modified = true;
+      if (ImGui::SliderFloat3(("Position" + id).c_str(), &light.position[0], -10, 10))
+        modified = true;
+      if (ImGui::SliderFloat(("Linear" + id).c_str(), &light.linear, 0.01, 10))
+        modified = true;
+      if (ImGui::SliderFloat(("Quadratic" + id).c_str(), &light.quadratic, 0.01, 10))
+        modified = true;
+
+      if (modified)
+      {
+        light.radiusSquared = light.CalcRadiusSquared(lightVolumeThreshold);
+        lightSSBO->SubData(&light, sizeof(PointLight), i * sizeof(PointLight));
+      }
+    }
+  }
+  ImGui::End();
 }
 
 void Renderer::ApplyTonemapping(float dt)
@@ -1039,8 +1042,12 @@ void Renderer::ApplyTonemapping(float dt)
   glDisable(GL_FRAMEBUFFER_SRGB);
 }
 
-void Renderer::CreateLocalLights()
+void Renderer::Scene1Lights()
 {
+  globalLight.ambient = glm::vec3(.0225f);
+  globalLight.diffuse = glm::vec3(.5f);
+  globalLight.specular = glm::vec3(.125f);
+
   localLights.clear();
   for (int x = 0; x < numLights; x++)
   {
@@ -1049,20 +1056,126 @@ void Renderer::CreateLocalLights()
     light.position = glm::vec4(glm::vec3(rng(-70, 70), rng(.1f, .6f), rng(-30, 30)), 0.f);
     light.linear = rng(lightFalloff.x, lightFalloff.y);
     light.quadratic = 0;// rng(5, 12);
-    light.radiusSquared = light.CalcRadiusSquared(.010f);
+    light.radiusSquared = light.CalcRadiusSquared(lightVolumeThreshold);
     localLights.push_back(light);
   }
-  lightSSBO = std::make_unique<StaticBuffer>(localLights.data(), glm::max(size_t(1), localLights.size() * sizeof(PointLight)), 0);
+  lightSSBO = std::make_unique<StaticBuffer>(localLights.data(), glm::max(size_t(1),
+    localLights.size() * sizeof(PointLight)), GL_DYNAMIC_STORAGE_BIT);
+}
+
+void Renderer::Scene2Lights()
+{
+  globalLight.ambient = glm::vec3(0);
+  globalLight.diffuse = glm::vec3(0);
+  globalLight.specular = glm::vec3(0);
+
+  localLights.clear();
+
+  PointLight light;
+  light.diffuse = glm::vec4(5.f, 5.f, 5.f, 0.f);
+  light.position = glm::vec4(2, 3, 0, 0);
+  light.linear = 0;
+  light.quadratic = 1;
+  light.radiusSquared = light.CalcRadiusSquared(lightVolumeThreshold);
+  localLights.push_back(light);
+
+  lightSSBO = std::make_unique<StaticBuffer>(localLights.data(), glm::max(size_t(1),
+    localLights.size() * sizeof(PointLight)), GL_DYNAMIC_STORAGE_BIT);
 }
 
 void Renderer::LoadScene1()
 {
+  cam.SetPos({ 59.4801331f, 5.45370150f, -6.37605810f });
+  cam.SetPitch(-2.98514581f);
+  cam.SetYaw(175.706055f);
+  cam.Update(0);
 
+  vertexBuffer->Clear();
+  indexBuffer->Clear();
+  batchedObjects.clear();
+  Scene1Lights();
+  envMap_hdri = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.hdr", false, false);
+  envMap_irradiance = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.irr.hdr", true, false);
+  auto sphereBatched = LoadObjBatch("Resources/Models/bunny.obj", materialManager, *vertexBuffer, *indexBuffer)[0];
+
+  auto terrain2 = LoadObjBatch("Resources/Models/sponza/sponza.obj", materialManager, *vertexBuffer, *indexBuffer);
+
+  auto tempMatsStr = materialManager.GetLinearMaterials();
+  for (size_t i = 0; i < tempMatsStr.size(); i++)
+  {
+    if (sphereBatched.materialName == tempMatsStr[i].first)
+    {
+      sphereBatched.materialIndex = i;
+      break;
+    }
+  }
+
+  ObjectBatched terrain2b;
+  for (auto& mesh : terrain2)
+  {
+    for (size_t i = 0; i < tempMatsStr.size(); i++)
+    {
+      if (mesh.materialName == tempMatsStr[i].first)
+      {
+        mesh.materialIndex = i;
+        break;
+      }
+    }
+    terrain2b.meshes.push_back(mesh);
+  }
+  terrain2b.transform.scale = glm::vec3(.05f);
+  batchedObjects.push_back(terrain2b);
+
+  const int num_spheres = 5;
+  for (int i = 0; i < num_spheres; i++)
+  {
+    ObjectBatched a;
+    a.meshes = { sphereBatched };
+    a.transform.rotation;
+    a.transform.translation = 2.0f * glm::vec3(glm::cos(glm::two_pi<float>() / num_spheres * i), 1.0f, glm::sin(glm::two_pi<float>() / num_spheres * i));
+    a.transform.scale = glm::vec3(1.0f);
+    batchedObjects.push_back(a);
+  }
+
+  SetupBuffers();
 }
 
 void Renderer::LoadScene2()
 {
+  cam.SetPos({ 4.1f, 2.6f, 2.5f });
+  cam.SetPitch(-13.0f);
+  cam.SetYaw(209.0f);
+  cam.Update(0);
 
+  vertexBuffer->Clear();
+  indexBuffer->Clear();
+  batchedObjects.clear();
+  Scene2Lights();
+  envMap_hdri = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.hdr", false, false);
+  envMap_irradiance = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.irr.hdr", true, false);
+
+  //auto model = LoadObjBatch("Resources/Models/avocado/avocado.obj", materialManager, *vertexBuffer, *indexBuffer);
+  auto model = LoadObjBatch("Resources/Models/motorcycle/Srad 750.obj", materialManager, *vertexBuffer, *indexBuffer);
+
+  auto tempMatsStr = materialManager.GetLinearMaterials();
+
+  ObjectBatched modelbatched;
+  for (auto& mesh : model)
+  {
+    for (size_t i = 0; i < tempMatsStr.size(); i++)
+    {
+      if (mesh.materialName == tempMatsStr[i].first)
+      {
+        mesh.materialIndex = i;
+        break;
+      }
+    }
+    modelbatched.meshes.push_back(mesh);
+  }
+  modelbatched.transform.scale = glm::vec3(2);
+  batchedObjects.push_back(modelbatched);
+
+  SetupBuffers();
 }
 
 void Renderer::SetupBuffers()
