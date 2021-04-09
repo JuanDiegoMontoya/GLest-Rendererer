@@ -1,6 +1,7 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
+#include <filesystem>
 #include "Renderer.h"
 #include "Shader.h"
 #include "Input.h"
@@ -8,6 +9,8 @@
 #include <stdexcept>
 #include <cstdlib>
 #include <algorithm>
+
+namespace fss = std::filesystem;
 
 import Utilities;
 import GPU.IndirectDraw;
@@ -68,7 +71,16 @@ void Renderer::InitImGui()
 
 void Renderer::MainLoop()
 {
-  bluenoiseTex = std::make_unique<Texture2D>("Resources/Textures/bluenoise_32.png", false, false);
+  TextureCreateInfo createInfo
+  {
+    .path = "Resources/Textures/bluenoise_32.png",
+    .sRGB = false,
+    .generateMips = false,
+    .HDR = false,
+    .minFilter = GL_LINEAR,
+    .magFilter = GL_LINEAR,
+  };
+  bluenoiseTex = std::make_unique<Texture2D>(createInfo);
   vertexBuffer = std::make_unique<DynamicBuffer>(sizeof(Vertex) * max_vertices, sizeof(Vertex));
   indexBuffer = std::make_unique<DynamicBuffer>(sizeof(uint32_t) * max_vertices, sizeof(uint32_t));
 
@@ -268,6 +280,8 @@ void Renderer::MainLoop()
     glBindTextureUnit(3, gDepth);
     glBindTextureUnit(4, shadowDepth);
     glBindTextureUnit(5, filteredTex);
+    glBindTextureUnit(6, envMap_irradiance->GetID());
+    glBindTextureUnit(7, envMap_hdri->GetID());
 
     // global light pass (and apply shadow)
     {
@@ -277,10 +291,12 @@ void Renderer::MainLoop()
       gPhongGlobal->SetInt("u_shadowMethod", shadow_method);
       gPhongGlobal->SetFloat("u_C", eConstant);
       gPhongGlobal->SetVec3("u_viewPos", cam.GetPos());
+      gPhongGlobal->SetIVec2("u_screenSize", WIDTH, HEIGHT);
+      gPhongGlobal->SetUInt("u_samples", numEnvSamples);
       gPhongGlobal->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
-      gPhongGlobal->SetVec3("u_globalLight_ambient", globalLight.ambient);
+      //gPhongGlobal->SetVec3("u_globalLight_ambient", globalLight.ambient);
       gPhongGlobal->SetVec3("u_globalLight_diffuse", globalLight.diffuse);
-      gPhongGlobal->SetVec3("u_globalLight_specular", globalLight.specular);
+      //gPhongGlobal->SetVec3("u_globalLight_specular", globalLight.specular);
       gPhongGlobal->SetVec3("u_globalLight_direction", globalLight.direction);
       gPhongGlobal->SetMat4("u_lightMatrix", lightMat);
       gPhongGlobal->SetFloat("u_lightBleedFix", vlightBleedFix);
@@ -320,13 +336,14 @@ void Renderer::MainLoop()
       glDepthMask(GL_FALSE);
       glDepthFunc(GL_LEQUAL);
       glBlendFunc(GL_ONE, GL_ZERO);
-      glBindTextureUnit(0, envMap_hdri->GetID());
 
       auto& hdriShader = Shader::shaders["hdri_skybox"];
       hdriShader->Bind();
       hdriShader->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
       hdriShader->SetIVec2("u_screenSize", WIDTH, HEIGHT);
       hdriShader->SetVec3("u_camPos", cam.GetPos());
+      envMap_hdri->Bind(0);
+      //envMap_irradiance->Bind(0);
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
@@ -871,8 +888,6 @@ void Renderer::DrawUI()
       globalLight.direction = glm::normalize(globalLight.direction);
     }
     ImGui::ColorEdit3("Diffuse", &globalLight.diffuse[0]);
-    ImGui::ColorEdit3("Ambient", &globalLight.ambient[0]);
-    ImGui::ColorEdit3("Specular", &globalLight.specular[0]);
 
     ImGui::SliderFloat("Light Volume Threshold", &lightVolumeThreshold, 0.001f, 0.1f);
   }
@@ -928,6 +943,8 @@ void Renderer::DrawUI()
       }
     }
 
+    ImGui::SliderInt("Num Env Samples", &numEnvSamples, 1, 100);
+    ImGui::Separator();
     ImGui::Checkbox("Material Override", &materialOverride);
     ImGui::ColorEdit3("Albedo Override", &albedoOverride[0]);
     ImGui::SliderFloat("Roughness Override", &roughnessOverride, 0.0f, 1.0f);
@@ -951,6 +968,36 @@ void Renderer::DrawUI()
     if (ImGui::Button("Lights: Scene 2"))
     {
       Scene2Lights();
+    }
+    ImGui::Separator();
+    ImGui::Text("Env Map");
+    for (auto& p : fss::directory_iterator("Resources/IBL"))
+    {
+      std::string str = p.path().string();
+      if (ImGui::Button(str.c_str()))
+      {
+        TextureCreateInfo info
+        {
+          .path = str,
+          .sRGB = false,
+          .generateMips = true,
+          .HDR = true,
+          .minFilter = GL_LINEAR_MIPMAP_LINEAR,
+          .magFilter = GL_LINEAR,
+        };
+
+        if (str.find(".irr") == std::string::npos)
+        {
+          //info.sRGB = true;
+          envMap_hdri = std::make_unique<Texture2D>(info);
+        }
+        else
+        {
+          info.generateMips = false;
+          info.minFilter = GL_LINEAR;
+          envMap_irradiance = std::make_unique<Texture2D>(info);
+        }
+      }
     }
   }
   ImGui::End();
@@ -1044,9 +1091,7 @@ void Renderer::ApplyTonemapping(float dt)
 
 void Renderer::Scene1Lights()
 {
-  globalLight.ambient = glm::vec3(.0225f);
-  globalLight.diffuse = glm::vec3(.5f);
-  globalLight.specular = glm::vec3(.125f);
+  globalLight.diffuse = glm::vec3(1.0f);
 
   localLights.clear();
   for (int x = 0; x < numLights; x++)
@@ -1065,9 +1110,7 @@ void Renderer::Scene1Lights()
 
 void Renderer::Scene2Lights()
 {
-  globalLight.ambient = glm::vec3(0);
   globalLight.diffuse = glm::vec3(0);
-  globalLight.specular = glm::vec3(0);
 
   localLights.clear();
 
@@ -1094,8 +1137,23 @@ void Renderer::LoadScene1()
   indexBuffer->Clear();
   batchedObjects.clear();
   Scene1Lights();
-  envMap_hdri = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.hdr", false, false);
-  envMap_irradiance = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.irr.hdr", true, false);
+
+  TextureCreateInfo createInfo
+  {
+    .path = "Resources/IBL/Arches_E_PineTree_3k.hdr",
+    .sRGB = false,
+    .generateMips = true,
+    .HDR = true,
+    .minFilter = GL_LINEAR_MIPMAP_LINEAR,
+    .magFilter = GL_LINEAR,
+  };
+
+  envMap_hdri = std::make_unique<Texture2D>(createInfo);
+  createInfo.path = "Resources/IBL/Arches_E_PineTree_3k.irr.hdr";
+  createInfo.generateMips = false;
+  createInfo.minFilter = GL_LINEAR;
+  envMap_irradiance = std::make_unique<Texture2D>(createInfo);
+
   auto sphereBatched = LoadObjBatch("Resources/Models/bunny.obj", materialManager, *vertexBuffer, *indexBuffer)[0];
 
   auto terrain2 = LoadObjBatch("Resources/Models/sponza/sponza.obj", materialManager, *vertexBuffer, *indexBuffer);
@@ -1151,8 +1209,22 @@ void Renderer::LoadScene2()
   indexBuffer->Clear();
   batchedObjects.clear();
   Scene2Lights();
-  envMap_hdri = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.hdr", false, false);
-  envMap_irradiance = std::make_unique<Texture2D>("Resources/Textures/14-Hamarikyu_Bridge_B_3k.irr.hdr", true, false);
+
+  TextureCreateInfo createInfo
+  {
+    .path = "Resources/IBL/Arches_E_PineTree_3k.hdr",
+    .sRGB = false,
+    .generateMips = true,
+    .HDR = true,
+    .minFilter = GL_LINEAR_MIPMAP_LINEAR,
+    .magFilter = GL_LINEAR,
+  };
+
+  envMap_hdri = std::make_unique<Texture2D>(createInfo);
+  createInfo.path = "Resources/IBL/Arches_E_PineTree_3k.irr.hdr";
+  createInfo.generateMips = false;
+  createInfo.minFilter = GL_LINEAR;
+  envMap_irradiance = std::make_unique<Texture2D>(createInfo);
 
   //auto model = LoadObjBatch("Resources/Models/avocado/avocado.obj", materialManager, *vertexBuffer, *indexBuffer);
   auto model = LoadObjBatch("Resources/Models/motorcycle/Srad 750.obj", materialManager, *vertexBuffer, *indexBuffer);

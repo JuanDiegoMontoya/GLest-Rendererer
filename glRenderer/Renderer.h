@@ -58,6 +58,7 @@ private:
   // pbr stuff
   std::unique_ptr<Texture2D> envMap_hdri;
   std::unique_ptr<Texture2D> envMap_irradiance;
+  int numEnvSamples = 20;
 
   // scene info
   Camera cam;
@@ -82,7 +83,7 @@ private:
   glm::vec3 albedoOverride{ 0.129f, 0.643f, 0.921f };
   float roughnessOverride{ 0.5f };
   float metalnessOverride{ 1.0f };
-  float ambientOcclusionOverride{ 0.0f };
+  float ambientOcclusionOverride{ 1.0f };
 
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex;
@@ -131,7 +132,7 @@ private:
   float ssr_searchDist = 15.0f;
   int ssr_maxRaySteps = 30;
   int ssr_binarySearchSteps = 5;
-  bool ssr_enabled = true;
+  bool ssr_enabled = false;
 
   // generic shadow stuff
   GLuint shadowFbo{}, shadowDepth{};

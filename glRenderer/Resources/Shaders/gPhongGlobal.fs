@@ -1,7 +1,6 @@
 #version 460 core
 #include "common.h"
-
-#define SPECULAR_STRENGTH 5
+#include "pbr_common.h"
 
 #define SHADOW_METHOD_PCF 0
 #define SHADOW_METHOD_VSM 1
@@ -16,17 +15,19 @@ layout (location = 2, binding = 2) uniform sampler2D gRMA;
 layout (location = 3, binding = 3) uniform sampler2D gDepth;
 layout (location = 4, binding = 4) uniform sampler2D shadowMap; // PCF, raw shadowmap
 layout (location = 5, binding = 5) uniform sampler2D filteredShadow; // ESM or VSM
-layout (location = 6) uniform vec3 u_viewPos;
-layout (location = 7) uniform mat4 u_lightMatrix;
-layout (location = 8) uniform mat4 u_invViewProj;
-layout (location = 9) uniform float u_lightBleedFix = .9;
-layout (location = 10) uniform int u_shadowMethod = SHADOW_METHOD_ESM;
-layout (location = 11) uniform float u_C;
-layout (location = 12) uniform vec3 u_globalLight_ambient;
-layout (location = 13) uniform vec3 u_globalLight_diffuse;
-layout (location = 14) uniform vec3 u_globalLight_specular;
-layout (location = 15) uniform vec3 u_globalLight_direction;
-layout (location = 16) uniform float msmBias = 3e-5;
+layout (location = 6, binding = 6) uniform sampler2D env_irradiance;
+layout (location = 7, binding = 7) uniform sampler2D env_radiance;
+layout (location = 8) uniform ivec2 u_screenSize;
+layout (location = 9) uniform uint u_samples;
+layout (location = 10) uniform vec3 u_viewPos;
+layout (location = 11) uniform mat4 u_lightMatrix;
+layout (location = 12) uniform mat4 u_invViewProj;
+layout (location = 13) uniform float u_lightBleedFix = .9;
+layout (location = 14) uniform int u_shadowMethod = SHADOW_METHOD_ESM;
+layout (location = 15) uniform float u_C;
+layout (location = 16) uniform vec3 u_globalLight_diffuse;
+layout (location = 17) uniform vec3 u_globalLight_direction;
+layout (location = 18) uniform float msmBias = 3e-5;
 
 layout (location = 0) out vec4 fragColor;
 
@@ -43,6 +44,7 @@ float linstep(float min, float max, float v)
 {
   return clamp((v - min) / (max - min), 0.0, 1.0);
 }
+
 float ReduceLightBleeding(float p_max, float amount)
 {
   // Remove the [0, Amount] tail and linearly rescale (Amount, 1].
@@ -169,41 +171,116 @@ float Shadow(vec4 lightSpacePos, float cosTheta)
   }
 }
 
+float CalcLOD(uint samples, vec3 N, vec3 H, float roughness)
+{
+  float dist = D_GGX(N, H, roughness);
+  return 0.5 * (log2(float(u_screenSize.x * u_screenSize.y) / samples) - log2(dist));
+}
+
+vec3 ComputeSpecularRadiance(vec3 N, vec3 V, vec3 F0, float roughness)
+{
+  vec3 up = abs(N.z) < 0.999 ? vec3(0, 0, 1) : vec3(1, 0, 0);
+  vec3 tanX = normalize(cross(up, N));
+  vec3 tanY = cross(N, tanX);
+
+  float NoV = max(dot(N, V), 0.0);
+
+  vec3 accumColor = vec3(0.0);
+  const uint samples = u_samples;
+  for (uint i = 0; i < samples; i++)
+  {
+    vec2 Xi = Hammersley(i, samples);
+    vec3 H = ImportanceSampleGGX(Xi, N, roughness);
+    vec3 L = normalize(-reflect(V, H));
+    //vec3 L  = normalize(2.0 * dot(V, H) * H - V);
+    
+    float NoL = max(dot(N, L), 0.0);
+    float NoH = max(dot(N, H), 0.0);
+    float VoH = max(dot(V, H), 0.0);
+    float lod = CalcLOD(samples, N, H, roughness);
+
+    vec3 F_ = fresnelSchlick(VoH, F0);
+    float G_ = G_Smith(N, V, L, roughness);
+    vec2 uuv = NormToEquirectangularUV(L);
+    vec3 LColor = textureLod(env_radiance, uuv, lod).rgb;
+
+    accumColor += F_ * G_ * LColor * VoH / max((NoH * NoV), 0.001);
+  }
+
+  return accumColor / float(samples);
+}
+
 void main()
 {
-  vec2 texSize = textureSize(gNormal, 0);
-  vec3 albedo = texture(gAlbedo, vTexCoord).rgb;
   float depth = texture(gDepth, vTexCoord).r;
-  vec3 vPos = WorldPosFromDepth(depth, texSize, u_invViewProj);
-  vec2 octNormal = texture(gNormal, vTexCoord).xy;
-  vec3 vNormal = oct_to_float32x3(octNormal);
-  //vec3 vNormal = texture(gNormal, vTexCoord).xyz;
-  float roughness = texture(gRMA, vTexCoord).r;
-  vec4 lightSpacePos = u_lightMatrix * vec4(vPos, 1.0);
 
   if (depth == 1.0)
   {
     discard;
   }
 
-  vec3 viewDir = normalize(u_viewPos - vPos);
-  vec3 lightDir = normalize(-u_globalLight_direction);
+  vec3 albedo = texture(gAlbedo, vTexCoord).rgb;
+  vec3 vPos = WorldPosFromDepth(depth, u_screenSize, u_invViewProj);
+  vec2 octNormal = texture(gNormal, vTexCoord).xy;
+  vec3 vNormal = oct_to_float32x3(octNormal);
+  //vec3 vNormal = texture(gNormal, vTexCoord).xyz;
+  vec4 RMA = texture(gRMA, vTexCoord);
+  float roughness = clamp(RMA[0], 0.01, 1.0);
+  float metalness = RMA[1];
+  float ambientOcclusion = RMA[2];
+  vec4 lightSpacePos = u_lightMatrix * vec4(vPos, 1.0);
 
-  float diff = max(dot(vNormal, lightDir), 0.0);
-  
-  float spec = 0.0;
-  vec3 reflectDir = reflect(-lightDir, vNormal);
-  spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0) * SPECULAR_STRENGTH;
-  
-  vec3 ambient = u_globalLight_ambient * albedo;
-  vec3 diffuse = u_globalLight_diffuse * diff * albedo;
-  vec3 specu = u_globalLight_specular * spec * (1.0 - roughness);
-
-  float shadow = 0.0;
-  if (diff > 0.0) // only shadow light-facing pixels
+  vec3 N = normalize(vNormal);
+  vec3 V = normalize(u_viewPos - vPos);
+  vec3 F0 = mix(vec3(0.04), albedo, metalness);
+  float NoV = max(dot(N, V), 0.0);
+  F0 = clamp(F0, vec3(0.01), vec3(0.99));
+  vec3 kS = fresnelSchlickRoughness(NoV, F0, roughness);
+  vec3 kD = 1.0 - kS;
+  vec3 irradiance = texture(env_irradiance, NormToEquirectangularUV(N)).rgb;
+  vec3 envDiffuse = irradiance * albedo;
+  vec3 envAmbient = (kD * envDiffuse);
+  vec3 envSpecular = vec3(0.0);
+  if (metalness > 0.0 || roughness < 1.0)
   {
-    shadow = Shadow(lightSpacePos, clamp(dot(vNormal, lightDir), -1.0, 1.0));
+    envSpecular = ComputeSpecularRadiance(N, V, F0, roughness) / M_PI;
   }
-  fragColor = vec4((ambient + (shadow) * (diffuse + step(.005, shadow) * specu)), 1.0);
+
+  kD *= 1.0f - metalness;
+  vec3 env = (kD * envAmbient + envSpecular) * ambientOcclusion;
+  //env = env * .0001 + envSpecular;
+
+  // directional light
+  {
+    vec3 L = normalize(-u_globalLight_direction);
+    vec3 H = normalize(V + L);
+    float NoL = max(dot(N, L), 0.0);
+    vec3 radiance = u_globalLight_diffuse.rgb;
+    float NDF = D_GGX(N, H, roughness);
+    float G = G_Smith(N, V, L, roughness);
+    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metalness;
+
+    // cook-torrance brdf
+    vec3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
+    vec3 specular = numerator / max(denominator, 0.001);
+
+    float cosTheta = max(dot(N, L), 0.0);
+    vec3 local = (kD * albedo / M_PI + specular) * radiance * cosTheta;
+
+    float shadow = 0.0;
+    if (NoL > 0.0) // only shadow light-facing pixels
+    {
+      shadow = Shadow(lightSpacePos, clamp(dot(N, L), -1.0, 1.0));
+    }
+    //fragColor = vec4((shadow * (diffuse + step(.005, shadow) * specular)), 1.0);
+    fragColor = vec4((shadow * local), 1.0);
+  }
+
+  fragColor.rgb += env;
   //fragColor = fragColor * .0001 + vec4(shadow); // view shadow
 }

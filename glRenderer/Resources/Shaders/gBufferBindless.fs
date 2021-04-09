@@ -56,7 +56,7 @@ void main()
   }
   gAlbedo.rgb = color.rgb;
   gAlbedo.a = 1.0; // unused
-  gRMA.rgba = vec4(1.0, 0.0, 0.0, 1.0); // sane defaults, gRMA.a is unused
+  gRMA.rgba = vec4(1.0, 0.0, 1.0, 1.0); // sane defaults, gRMA.a is unused
   if (!u_materialOverride)
   {
     if (hasRoughness)

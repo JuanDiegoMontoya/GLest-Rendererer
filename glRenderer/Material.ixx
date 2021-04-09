@@ -3,6 +3,7 @@ module;
 #include <unordered_map>
 #include <optional>
 #include <string>
+#include <glad/glad.h>
 
 export module Material;
 
@@ -82,12 +83,24 @@ Material& MaterialManager::MakeMaterial(std::string name,
     return it->second;
   }
 
+  TextureCreateInfo info;
+  info.generateMips = true;
+  info.HDR = false;
+  info.minFilter = GL_LINEAR_MIPMAP_LINEAR;
+  info.magFilter = GL_LINEAR;
+  info.sRGB = false;
+
   Material material;
-  material.albedoTex = new Texture2D(albedoTexName, false, true);
-  material.roughnessTex = new Texture2D(roughnessTexName, false, true);
-  material.metalnessTex = new Texture2D(metalnessTexName, false, true);
-  material.normalTex = new Texture2D(normalTexName, false, true);
-  material.ambientOcclusionTex = new Texture2D(ambientOcclusionTexName, false, true);
+  info.path = albedoTexName;
+  material.albedoTex = new Texture2D(info);
+  info.path = roughnessTexName;
+  material.roughnessTex = new Texture2D(info);
+  info.path = metalnessTexName;
+  material.metalnessTex = new Texture2D(info);
+  info.path = normalTexName;
+  material.normalTex = new Texture2D(info);
+  info.path = ambientOcclusionTexName;
+  material.ambientOcclusionTex = new Texture2D(info);
   auto p = materials.insert({ name, material });
   return p.first->second;
 }
