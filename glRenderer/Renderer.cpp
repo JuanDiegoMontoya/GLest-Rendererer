@@ -822,133 +822,51 @@ void Renderer::Cleanup()
 
 void Renderer::DrawUI()
 {
-  ImGui::Begin("Volumetrics");
-  {
-    ImGui::Checkbox("Enabled", &volumetric_enabled);
-    ImGui::Text("Rays");
-    ImGui::Separator();
-    ImGui::SliderInt("Steps", &volumetric_steps, 1, 100);
-    ImGui::SliderFloat("Intensity", &volumetric_intensity, 0.0f, 1.0f, "%.3f", 3.0f);
-    ImGui::SliderFloat("Offset", &volumetric_noiseOffset, 0.0f, 1.0f);
-
-    ImGui::Text((const char*)(u8"À-Trous"));
-    ImGui::Separator();
-    ImGui::Text("Passes");
-    int passes = atrousPasses;
-    ImGui::RadioButton("Zero", &passes, 0);
-    ImGui::SameLine(); ImGui::RadioButton("One", &passes, 1);
-    ImGui::SameLine(); ImGui::RadioButton("Two", &passes, 2);
-    atrousPasses = passes;
-    ImGui::SliderFloat("c_phi", &c_phi, .0001f, 10.0f, "%.4f", 4.0f);
-    //ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
-    //ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Step width", &stepWidth, 0.5f, 2.0f, "%.3f");
-  }
-  ImGui::End();
-
-  ImGui::Begin("Shadows");
-  {
-    ImGui::Text("Method");
-    ImGui::RadioButton("PCF", &shadow_method, SHADOW_METHOD_PCF);
-    ImGui::SameLine();
-    ImGui::RadioButton("VSM", &shadow_method, SHADOW_METHOD_VSM);
-    ImGui::SameLine();
-    ImGui::RadioButton("ESM", &shadow_method, SHADOW_METHOD_ESM);
-    ImGui::SameLine();
-    ImGui::RadioButton("MSM", &shadow_method, SHADOW_METHOD_MSM);
-    ImGui::Separator();
-
-    ImGui::SliderInt("Blur passes", &BLUR_PASSES, 0, 5);
-    ImGui::SliderInt("Blur width", &BLUR_STRENGTH, 0, 6);
-    ImGui::SliderFloat("(VSM) Hardness", &vlightBleedFix, 0.0f, 1.0f, "%.3f");
-    ImGui::SliderFloat("(ESM) C", &eConstant, 60, 90);
-    if (ImGui::Checkbox("Generate Mips", &shadow_gen_mips))
-    {
-      if (shadow_gen_mips)
-      {
-        glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-      }
-      else
-      {
-        glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      }
-    }
-  }
-  ImGui::End();
-
-  ImGui::Begin("Environment");
-  {
-    if (ImGui::SliderAngle("Sun angle", &sunPosition, 180, 360))
-    {
-      globalLight.direction.x = .1f;
-      globalLight.direction.y = glm::sin(sunPosition);
-      globalLight.direction.z = glm::cos(sunPosition);
-      globalLight.direction = glm::normalize(globalLight.direction);
-    }
-    ImGui::ColorEdit3("Diffuse", &globalLight.diffuse[0]);
-
-    ImGui::SliderFloat("Light Volume Threshold", &lightVolumeThreshold, 0.001f, 0.1f);
-  }
-  ImGui::End();
-
-  ImGui::Begin("Postprocessing");
-  {
-    ImGui::SliderFloat("Luminance", &targetLuminance, 0.01f, 1.0f);
-    ImGui::SliderFloat("Exposure factor", &exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Adjustment speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Min exposure", &minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Max exposure", &maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
-  }
-  ImGui::End();
-
-  ImGui::Begin("Screen-Space Reflections");
-  {
-    ImGui::Checkbox("Enabled", &ssr_enabled);
-    ImGui::SliderFloat("Step size", &ssr_rayStep, 0.01f, 1.0f);
-    ImGui::SliderFloat("Min step", &ssr_minRayStep, 0.01f, 1.0f);
-    ImGui::SliderFloat("Thickness", &ssr_thickness, 0.00f, 1.0f);
-    ImGui::SliderFloat("Search distance", &ssr_searchDist, 1.0f, 50.0f);
-    ImGui::SliderInt("Max steps", &ssr_maxRaySteps, 0, 100);
-    ImGui::SliderInt("Binary search steps", &ssr_binarySearchSteps, 0, 10);
-  }
-  ImGui::End();
-
-  ImGui::Begin("View Buffer");
-  {
-    ImGui::Image((void*)uiViewBuffer, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
-    ImGui::RadioButton("gAlbedo", &uiViewBuffer, gAlbedo);
-    ImGui::RadioButton("gNormal", &uiViewBuffer, gNormal);
-    ImGui::RadioButton("gDepth", &uiViewBuffer, gDepth);
-    ImGui::RadioButton("gRMA", &uiViewBuffer, gRMA);
-    ImGui::RadioButton("hdrColor", &uiViewBuffer, hdrColor);
-    ImGui::RadioButton("hdrDepth", &uiViewBuffer, hdrDepth);
-    ImGui::RadioButton("shadowDepthGoodFormat", &uiViewBuffer, vshadowDepthGoodFormat);
-    ImGui::RadioButton("atrousTex", &uiViewBuffer, atrousTex);
-    ImGui::RadioButton("volumetricsTex", &uiViewBuffer, volumetricsTex);
-    ImGui::RadioButton("postprocessColor", &uiViewBuffer, postprocessColor);
-    ImGui::RadioButton("ssrTex", &uiViewBuffer, ssrTex);
-  }
-  ImGui::End();
-
   ImGui::Begin("Scene");
+
+  if (ImGui::SliderFloat("FoV", &fovDeg, 30.0f, 100.0f))
+  {
+    cam.SetFoV(fovDeg);
+    cam.Update(0);
+  }
+
+  if (ImGui::TreeNode("Environment"))
+  {
+    ImGui::Text("Global Light");
+    {
+      if (ImGui::SliderAngle("Sun angle", &sunPosition, 180, 360))
+      {
+        globalLight.direction.x = .1f;
+        globalLight.direction.y = glm::sin(sunPosition);
+        globalLight.direction.z = glm::cos(sunPosition);
+        globalLight.direction = glm::normalize(globalLight.direction);
+      }
+      ImGui::ColorEdit3("Diffuse", &globalLight.diffuse[0]);
+    }
+
+    ImGui::Separator();
+    ImGui::Text("PBR/IBL");
+    {
+      ImGui::SliderInt("Num Env Samples", &numEnvSamples, 1, 100);
+      ImGui::Checkbox("Material Override", &materialOverride);
+      ImGui::ColorEdit3("Albedo Override", &albedoOverride[0]);
+      ImGui::SliderFloat("Roughness Override", &roughnessOverride, 0.0f, 1.0f);
+      ImGui::SliderFloat("Metalness Override", &metalnessOverride, 0.0f, 1.0f);
+    }
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNode("Scene-Data"))
   {
     ImGui::SliderInt("Local lights", &numLights, 0, 40000);
-    if (ImGui::SliderFloat2("Light falloff", glm::value_ptr(lightFalloff), 0.01f, 10.0f, "%.3f", 2.0f))
+    ImGui::SliderFloat("Light Cutoff", &lightVolumeThreshold, 0.001f, 0.1f);
+    if (ImGui::SliderFloat2("Light Falloff", glm::value_ptr(lightFalloff), 0.01f, 10.0f, "%.3f", 2.0f))
     {
       if (lightFalloff.y < lightFalloff.x)
       {
         std::swap(lightFalloff.x, lightFalloff.y);
       }
     }
-
-    ImGui::SliderInt("Num Env Samples", &numEnvSamples, 1, 100);
-    ImGui::Separator();
-    ImGui::Checkbox("Material Override", &materialOverride);
-    ImGui::ColorEdit3("Albedo Override", &albedoOverride[0]);
-    ImGui::SliderFloat("Roughness Override", &roughnessOverride, 0.0f, 1.0f);
-    ImGui::SliderFloat("Metalness Override", &metalnessOverride, 0.0f, 1.0f);
 
     if (ImGui::Button("Load Scene 1"))
     {
@@ -970,7 +888,30 @@ void Renderer::DrawUI()
       Scene2Lights();
     }
     ImGui::Separator();
-    ImGui::Text("Env Map");
+
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNode("View Texture"))
+  {
+    ImGui::Image((void*)uiViewBuffer, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
+    ImGui::RadioButton("gAlbedo", &uiViewBuffer, gAlbedo);
+    ImGui::RadioButton("gNormal", &uiViewBuffer, gNormal);
+    ImGui::RadioButton("gDepth", &uiViewBuffer, gDepth);
+    ImGui::RadioButton("gRMA", &uiViewBuffer, gRMA);
+    ImGui::RadioButton("hdrColor", &uiViewBuffer, hdrColor);
+    ImGui::RadioButton("hdrDepth", &uiViewBuffer, hdrDepth);
+    ImGui::RadioButton("shadowDepthGoodFormat", &uiViewBuffer, vshadowDepthGoodFormat);
+    ImGui::RadioButton("atrousTex", &uiViewBuffer, atrousTex);
+    ImGui::RadioButton("volumetricsTex", &uiViewBuffer, volumetricsTex);
+    ImGui::RadioButton("postprocessColor", &uiViewBuffer, postprocessColor);
+    ImGui::RadioButton("ssrTex", &uiViewBuffer, ssrTex);
+
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNode("Environment Map"))
+  {
     for (auto& p : fss::directory_iterator("Resources/IBL"))
     {
       std::string str = p.path().string();
@@ -999,10 +940,11 @@ void Renderer::DrawUI()
         }
       }
     }
-  }
-  ImGui::End();
 
-  ImGui::Begin("Lights");
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNode("Lights List"))
   {
     for (int i = 0; i < localLights.size(); i++)
     {
@@ -1024,8 +966,101 @@ void Renderer::DrawUI()
         light.radiusSquared = light.CalcRadiusSquared(lightVolumeThreshold);
         lightSSBO->SubData(&light, sizeof(PointLight), i * sizeof(PointLight));
       }
+
+      ImGui::Separator();
     }
+    ImGui::TreePop();
   }
+
+  ImGui::End();
+
+
+  ImGui::Begin("Features");
+
+  ImGui::Checkbox("##volumetric", &volumetric_enabled);
+  ImGui::SameLine();
+  if (ImGui::TreeNode("Volumetric Fog"))
+  {
+    ImGui::Text("Rays");
+    ImGui::Separator();
+    ImGui::SliderInt("Steps", &volumetric_steps, 1, 100);
+    ImGui::SliderFloat("Intensity", &volumetric_intensity, 0.0f, 1.0f, "%.3f", 3.0f);
+    ImGui::SliderFloat("Offset", &volumetric_noiseOffset, 0.0f, 1.0f);
+
+    ImGui::Text((const char*)(u8"À-Trous"));
+    ImGui::Separator();
+    ImGui::Text("Passes");
+    int passes = atrousPasses;
+    ImGui::RadioButton("Zero", &passes, 0);
+    ImGui::SameLine(); ImGui::RadioButton("One", &passes, 1);
+    ImGui::SameLine(); ImGui::RadioButton("Two", &passes, 2);
+    atrousPasses = passes;
+    ImGui::SliderFloat("c_phi", &c_phi, .0001f, 10.0f, "%.4f", 4.0f);
+    //ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
+    //ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Step width", &stepWidth, 0.5f, 2.0f, "%.3f");
+
+    ImGui::TreePop();
+  }
+
+  ImGui::Checkbox("##ssr", &ssr_enabled);
+  ImGui::SameLine();
+  if (ImGui::TreeNode("Screen-Space Reflections"))
+  {
+    ImGui::SliderFloat("Step size", &ssr_rayStep, 0.01f, 1.0f);
+    ImGui::SliderFloat("Min step", &ssr_minRayStep, 0.01f, 1.0f);
+    ImGui::SliderFloat("Thickness", &ssr_thickness, 0.00f, 1.0f);
+    ImGui::SliderFloat("Search distance", &ssr_searchDist, 1.0f, 50.0f);
+    ImGui::SliderInt("Max steps", &ssr_maxRaySteps, 0, 100);
+    ImGui::SliderInt("Binary search steps", &ssr_binarySearchSteps, 0, 10);
+
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNode("Shadows"))
+  {
+    ImGui::Text("Method");
+    ImGui::RadioButton("PCF", &shadow_method, SHADOW_METHOD_PCF);
+    ImGui::SameLine();
+    ImGui::RadioButton("VSM", &shadow_method, SHADOW_METHOD_VSM);
+    ImGui::SameLine();
+    ImGui::RadioButton("ESM", &shadow_method, SHADOW_METHOD_ESM);
+    ImGui::SameLine();
+    ImGui::RadioButton("MSM", &shadow_method, SHADOW_METHOD_MSM);
+    ImGui::Separator();
+
+    ImGui::SliderInt("Blur passes", &BLUR_PASSES, 0, 5);
+    ImGui::SliderInt("Blur width", &BLUR_STRENGTH, 0, 6);
+    ImGui::SliderFloat("(VSM) Hardness", &vlightBleedFix, 0.0f, 1.0f, "%.3f");
+    ImGui::SliderFloat("(ESM) C", &eConstant, 60, 90);
+    if (ImGui::Checkbox("Generate Mips", &shadow_gen_mips))
+    {
+      if (shadow_gen_mips)
+      {
+        glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+      }
+      else
+      {
+        glTextureParameteri(vshadowDepthGoodFormat, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTextureParameteri(eExpShadowDepth, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      }
+    }
+
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNode("Postprocessing"))
+  {
+    ImGui::SliderFloat("Luminance", &targetLuminance, 0.01f, 1.0f);
+    ImGui::SliderFloat("Exposure factor", &exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Adjustment speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Min exposure", &minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Max exposure", &maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
+
+    ImGui::TreePop();
+  }
+
   ImGui::End();
 }
 

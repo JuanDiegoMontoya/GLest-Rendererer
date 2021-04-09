@@ -16,7 +16,7 @@ public:
 
   void UpdateViewMat()
   {
-    view_ = glm::lookAt(worldpos_, worldpos_ + front, { 0,1,0 });
+    view_ = glm::lookAt(worldpos_, worldpos_ + front, { 0, 1, 0 });
     viewProj_ = proj_ * view_;
     //frustum_->Transform(proj_, view_);
     dirty_ = false;
@@ -24,7 +24,7 @@ public:
 
   void GenProjection()
   {
-    proj_ = glm::perspective(glm::radians(fovDeg_), 1920.f / 1080.f, near_, far_);
+    proj_ = glm::perspective(glm::radians(fovDeg_), 16.0f / 9.0f, near_, far_);
     dirty_ = true;
   }
 
@@ -78,6 +78,7 @@ public:
   const glm::vec3& GetUp() const { return up; }
   const glm::vec3& GetRight() const { return right; }
 
+  void SetFoV(float newFoV) { fovDeg_ = newFoV; dirty_ = true; }
   void SetPos(const glm::vec3& v) { worldpos_ = v; dirty_ = true; }
   void SetFar(float f) { far_ = f; GenProjection(); }
   void SetFront(const glm::vec3& f) { front = f; dirty_ = true; }

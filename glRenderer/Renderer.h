@@ -60,8 +60,11 @@ private:
   std::unique_ptr<Texture2D> envMap_irradiance;
   int numEnvSamples = 20;
 
-  // scene info
+  // camera
   Camera cam;
+  float fovDeg = 80.0f;
+
+  // scene info
   Mesh sphere;
   std::vector<ObjectBatched> batchedObjects;
   const int max_vertices = 5'000'000;
