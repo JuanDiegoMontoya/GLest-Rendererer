@@ -237,17 +237,16 @@ void main()
   F0 = clamp(F0, vec3(0.01), vec3(0.99));
   vec3 kS = fresnelSchlickRoughness(NoV, F0, roughness);
   vec3 kD = 1.0 - kS;
+  kD *= 1.0 - metalness;
   vec3 irradiance = texture(env_irradiance, NormToEquirectangularUV(N)).rgb;
   vec3 envDiffuse = irradiance * albedo;
-  vec3 envAmbient = (kD * envDiffuse);
   vec3 envSpecular = vec3(0.0);
   if (metalness > 0.0 || roughness < 1.0)
   {
     envSpecular = ComputeSpecularRadiance(N, V, F0, roughness) / M_PI;
   }
 
-  kD *= 1.0f - metalness;
-  vec3 env = (kD * envAmbient + envSpecular) * ambientOcclusion;
+  vec3 env = (kD * envDiffuse + envSpecular) * ambientOcclusion;
   //env = env * .0001 + envSpecular;
 
   // directional light
@@ -282,5 +281,6 @@ void main()
   }
 
   fragColor.rgb += env;
+  //fragColor = fragColor * .0001 + vec4(irradiance, 1.0);
   //fragColor = fragColor * .0001 + vec4(shadow); // view shadow
 }

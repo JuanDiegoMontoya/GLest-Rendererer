@@ -32,14 +32,14 @@ public:
   ~Texture2D();
 
   void Bind(unsigned slot = 0) const;
-  unsigned GetID() const { return rendererID_; }
+  unsigned GetID() const { return id_; }
   uint64_t GetBindlessHandle() const { return bindlessHandle_; }
-  bool Valid() const { return rendererID_ != 0; }
+  bool Valid() const { return id_ != 0; }
 
-  glm::ivec2 GetDimensions() const { return dim_; }
+  glm::ivec2 GetSize() const { return dim_; }
 
 private:
-  unsigned rendererID_{};
+  unsigned id_{};
   uint64_t bindlessHandle_{};
   glm::ivec2 dim_{};
 };
@@ -62,18 +62,17 @@ Texture2D::Texture2D(const TextureCreateInfo& createInfo)
   auto pixels = stbi_loadf(tex.c_str(), &dim_.x, &dim_.y, &n, 4);
   assert(pixels != nullptr);
 
-  glCreateTextures(GL_TEXTURE_2D, 1, &rendererID_);
+  glCreateTextures(GL_TEXTURE_2D, 1, &id_);
 
   // sets the anisotropic filtering texture paramter to the highest supported by the system
   GLfloat a;
   glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &a);
-  glTextureParameterf(rendererID_, GL_TEXTURE_MAX_ANISOTROPY, a);
+  glTextureParameterf(id_, GL_TEXTURE_MAX_ANISOTROPY, a);
 
-  glTextureParameteri(rendererID_, GL_TEXTURE_MIN_FILTER, createInfo.minFilter);
-  glTextureParameteri(rendererID_, GL_TEXTURE_MAG_FILTER, createInfo.magFilter);
-  glTextureParameteri(rendererID_, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTextureParameteri(rendererID_, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
+  glTextureParameteri(id_, GL_TEXTURE_MIN_FILTER, createInfo.minFilter);
+  glTextureParameteri(id_, GL_TEXTURE_MAG_FILTER, createInfo.magFilter);
+  glTextureParameteri(id_, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTextureParameteri(id_, GL_TEXTURE_WRAP_T, GL_REPEAT);
   GLuint levels = 1;
   if (createInfo.generateMips)
   {
@@ -81,9 +80,9 @@ Texture2D::Texture2D(const TextureCreateInfo& createInfo)
   }
   
   const GLenum internalFormat = createInfo.sRGB ? GL_SRGB8_ALPHA8 : createInfo.HDR ? GL_RGBA16F : GL_RGBA8;
-  glTextureStorage2D(rendererID_, levels, internalFormat, dim_.x, dim_.y);
+  glTextureStorage2D(id_, levels, internalFormat, dim_.x, dim_.y);
   glTextureSubImage2D(
-    rendererID_,
+    id_,
     0,              // mip level 0
     0, 0,           // image start layer
     dim_.x, dim_.y, // x, y size
@@ -96,10 +95,10 @@ Texture2D::Texture2D(const TextureCreateInfo& createInfo)
   // use OpenGL to generate mipmaps for us
   if (createInfo.generateMips)
   {
-    glGenerateTextureMipmap(rendererID_);
+    glGenerateTextureMipmap(id_);
   }
 
-  bindlessHandle_ = glGetTextureHandleARB(rendererID_);
+  bindlessHandle_ = glGetTextureHandleARB(id_);
   glMakeTextureHandleResidentARB(bindlessHandle_);
 }
 
@@ -111,16 +110,16 @@ Texture2D& Texture2D::operator=(Texture2D&& rhs) noexcept
 
 Texture2D::Texture2D(Texture2D&& rhs) noexcept
 {
-  this->rendererID_ = std::exchange(rhs.rendererID_, 0);
+  this->id_ = std::exchange(rhs.id_, 0);
   this->dim_ = rhs.dim_;
 }
 
 Texture2D::~Texture2D()
 {
-  glDeleteTextures(1, &rendererID_);
+  glDeleteTextures(1, &id_);
 }
 
 void Texture2D::Bind(unsigned slot) const
 {
-  glBindTextureUnit(slot, rendererID_);
+  glBindTextureUnit(slot, id_);
 }

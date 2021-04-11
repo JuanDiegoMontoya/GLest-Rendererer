@@ -21,9 +21,7 @@ int main()
 
 // TODO list (unordered)
 // PCF
-// image-based lighting
 // tiled/clustered shading
-// PBR
 // correctly account for shininess term in SSR
 // fix normal mapping (again)
 
@@ -37,3 +35,5 @@ int main()
 // skybox
 // efficient draw call submission/multi draw
 // bindless texturing
+// PBR
+// image-based lighting

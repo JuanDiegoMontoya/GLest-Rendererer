@@ -57,8 +57,12 @@ private:
 
   // pbr stuff
   std::unique_ptr<Texture2D> envMap_hdri;
-  std::unique_ptr<Texture2D> envMap_irradiance;
+  //std::unique_ptr<Texture2D> envMap_irradiance;
   int numEnvSamples = 20;
+  GLuint irradianceMap{};
+  void LoadEnvironmentMap(std::string path);
+  void DrawPbrSphereGrid();
+  bool drawPbrSphereGridQuestionMark = false;
 
   // camera
   Camera cam;
@@ -66,6 +70,7 @@ private:
 
   // scene info
   Mesh sphere;
+  Mesh sphere2;
   std::vector<ObjectBatched> batchedObjects;
   const int max_vertices = 5'000'000;
   std::unique_ptr<DynamicBuffer> vertexBuffer;

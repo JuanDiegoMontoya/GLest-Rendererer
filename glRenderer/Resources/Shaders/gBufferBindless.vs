@@ -10,7 +10,6 @@ layout (location = 0) uniform mat4 u_viewProj;
 struct ObjectUniforms
 {
   mat4 modelMatrix;
-  mat4 normalMatrix;
   uint materialIndex;
 };
 
@@ -33,6 +32,7 @@ void main()
   vMaterialIndex = obj.materialIndex;
   vTexCoord = aTexCoord;
   vPos = vec3(obj.modelMatrix * vec4(aPos, 1.0));
-  vNormal = mat3(obj.normalMatrix) * aNormal;
+  vNormal = vec3(obj.modelMatrix * vec4(aNormal, 0.0));
+  //vNormal = mat3(obj.normalMatrix) * aNormal;
   gl_Position = u_viewProj * vec4(vPos, 1.0);
 }

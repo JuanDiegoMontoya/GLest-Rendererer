@@ -196,6 +196,8 @@ export void CompileShaders()
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
       { "hdri_skybox.fs", GL_FRAGMENT_SHADER }
     }));
+  Shader::shaders["convolve_image"].emplace(Shader(
+    { { "irradiance_convolve.cs", GL_COMPUTE_SHADER } }));
 }
 
 export void drawFSTexture(GLuint texID)
@@ -268,4 +270,22 @@ export void blurTextureR32f(GLuint inOutTex, GLuint intermediateTexture, GLint w
 {
   std::string strs[] = { "gaussian32f_blur1", "gaussian32f_blur2", "gaussian32f_blur3", "gaussian32f_blur4", "gaussian32f_blur5", "gaussian32f_blur6" };
   blurTextureBase(inOutTex, intermediateTexture, width, height, passes, strength, strs, GL_R32F);
+}
+
+export void convolve_image(GLuint inTex, GLuint outTex, GLint outWidth, GLint outHeight)
+{
+  auto& shader = Shader::shaders["convolve_image"];
+  shader->Bind();
+  shader->SetInt("u_environment", 0);
+  shader->SetInt("u_outTex", 0);
+
+  const int X_SIZE = 8;
+  const int Y_SIZE = 8;
+  const int xgroups = (outWidth + X_SIZE - 1) / X_SIZE;
+  const int ygroups = (outHeight + Y_SIZE - 1) / Y_SIZE;
+
+  glBindTextureUnit(0, inTex);
+  glBindImageTexture(0, outTex, 0, false, 0, GL_WRITE_ONLY, GL_RGBA16F);
+  glDispatchCompute(xgroups, ygroups, 1);
+  glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 }

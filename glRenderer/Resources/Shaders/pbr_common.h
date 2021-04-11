@@ -39,10 +39,17 @@ vec2 NormToEquirectangularUV(vec3 normal)
   // float phi = (-0.6981 * -normal.y * -normal.y - 0.8726) * -normal.y + 1.5707;
   // float theta = normal.xz * (-0.1784 * normal.xz - 0.0663 * normal.xz * normal.xz + 1.0301);
   // vec2 uv = vec2(theta * 0.1591, phi * 0.3183);
+  
   float phi = acos(-normal.y);
   float theta = atan(normal.z, normal.x) + M_PI; // or normal.xz?
   vec2 uv = vec2(theta / M_TAU, phi / M_PI);
   return uv;
+
+  // const vec2 invAtan = vec2(0.1591f, 0.3183f);
+  // vec2 uv = vec2(atan(normal.z, normal.x), asin(normal.y));
+  // uv *= invAtan;
+  // uv += 0.5;
+  // return uv;
 }
 
 vec2 Hammersley(uint i, uint N)

@@ -248,7 +248,7 @@ void Renderer::MainLoop()
           ObjectUniforms uniform
           {
             .modelMatrix = obj.transform.GetModelMatrix(),
-            .normalMatrix = obj.transform.GetNormalMatrix(),
+            //.normalMatrix = obj.transform.GetNormalMatrix(),
             .materialIndex = mesh.materialIndex
           };
           uniforms.push_back(uniform);
@@ -270,6 +270,11 @@ void Renderer::MainLoop()
       glVertexArrayVertexBuffer(vao, 0, vertexBuffer->GetBufferHandle(), 0, sizeof(Vertex));
       glVertexArrayElementBuffer(vao, indexBuffer->GetBufferHandle());
       glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, uniforms.size(), sizeof(DrawElementsIndirectCommand));
+      
+      if (drawPbrSphereGridQuestionMark)
+      {
+        DrawPbrSphereGrid();
+      }
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
@@ -280,7 +285,7 @@ void Renderer::MainLoop()
     glBindTextureUnit(3, gDepth);
     glBindTextureUnit(4, shadowDepth);
     glBindTextureUnit(5, filteredTex);
-    glBindTextureUnit(6, envMap_irradiance->GetID());
+    glBindTextureUnit(6, irradianceMap);
     glBindTextureUnit(7, envMap_hdri->GetID());
 
     // global light pass (and apply shadow)
@@ -401,7 +406,6 @@ void Renderer::MainLoop()
         }
       }
     }
-
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
@@ -506,6 +510,10 @@ void Renderer::MainLoop()
     if (Input::IsKeyDown(GLFW_KEY_P))
     {
       drawFSTexture(envMap_hdri->GetID());
+    }
+    if (Input::IsKeyDown(GLFW_KEY_O))
+    {
+      drawFSTexture(irradianceMap);
     }
     if (Input::IsKeyPressed(GLFW_KEY_C))
     {
@@ -764,6 +772,7 @@ void Renderer::InitScene()
   globalLight.direction = glm::normalize(glm::vec3(1, -.5f, 0));
 
   sphere = std::move(LoadObjMesh("Resources/Models/goodSphere.obj", materialManager)[0]);
+  sphere2 = std::move(LoadObjMesh("Resources/Models/sphere2.obj", materialManager)[0]);
 
   LoadScene2();
 }
@@ -816,6 +825,8 @@ void Renderer::Cleanup()
   glDeleteTextures(1, &hdrDepth);
   glDeleteFramebuffers(1, &hdrfbo);
 
+  glDeleteTextures(1, &irradianceMap);
+
   glfwDestroyWindow(window);
   glfwTerminate();
 }
@@ -847,8 +858,9 @@ void Renderer::DrawUI()
     ImGui::Separator();
     ImGui::Text("PBR/IBL");
     {
-      ImGui::SliderInt("Num Env Samples", &numEnvSamples, 1, 100);
       ImGui::Checkbox("Material Override", &materialOverride);
+      ImGui::Checkbox("Draw PBR Grid", &drawPbrSphereGridQuestionMark);
+      ImGui::SliderInt("Num Env Samples", &numEnvSamples, 1, 100);
       ImGui::ColorEdit3("Albedo Override", &albedoOverride[0]);
       ImGui::SliderFloat("Roughness Override", &roughnessOverride, 0.0f, 1.0f);
       ImGui::SliderFloat("Metalness Override", &metalnessOverride, 0.0f, 1.0f);
@@ -915,29 +927,9 @@ void Renderer::DrawUI()
     for (auto& p : fss::directory_iterator("Resources/IBL"))
     {
       std::string str = p.path().string();
-      if (ImGui::Button(str.c_str()))
+      if (str.find(".irr") == std::string::npos && ImGui::Button(str.c_str()))
       {
-        TextureCreateInfo info
-        {
-          .path = str,
-          .sRGB = false,
-          .generateMips = true,
-          .HDR = true,
-          .minFilter = GL_LINEAR_MIPMAP_LINEAR,
-          .magFilter = GL_LINEAR,
-        };
-
-        if (str.find(".irr") == std::string::npos)
-        {
-          //info.sRGB = true;
-          envMap_hdri = std::make_unique<Texture2D>(info);
-        }
-        else
-        {
-          info.generateMips = false;
-          info.minFilter = GL_LINEAR;
-          envMap_irradiance = std::make_unique<Texture2D>(info);
-        }
+        LoadEnvironmentMap(str);
       }
     }
 
@@ -1149,13 +1141,13 @@ void Renderer::Scene2Lights()
 
   localLights.clear();
 
-  PointLight light;
-  light.diffuse = glm::vec4(5.f, 5.f, 5.f, 0.f);
-  light.position = glm::vec4(2, 3, 0, 0);
-  light.linear = 0;
-  light.quadratic = 1;
-  light.radiusSquared = light.CalcRadiusSquared(lightVolumeThreshold);
-  localLights.push_back(light);
+  //PointLight light;
+  //light.diffuse = glm::vec4(5.f, 5.f, 5.f, 0.f);
+  //light.position = glm::vec4(2, 3, 0, 0);
+  //light.linear = 0;
+  //light.quadratic = 1;
+  //light.radiusSquared = light.CalcRadiusSquared(lightVolumeThreshold);
+  //localLights.push_back(light);
 
   lightSSBO = std::make_unique<StaticBuffer>(localLights.data(), glm::max(size_t(1),
     localLights.size() * sizeof(PointLight)), GL_DYNAMIC_STORAGE_BIT);
@@ -1173,21 +1165,7 @@ void Renderer::LoadScene1()
   batchedObjects.clear();
   Scene1Lights();
 
-  TextureCreateInfo createInfo
-  {
-    .path = "Resources/IBL/Arches_E_PineTree_3k.hdr",
-    .sRGB = false,
-    .generateMips = true,
-    .HDR = true,
-    .minFilter = GL_LINEAR_MIPMAP_LINEAR,
-    .magFilter = GL_LINEAR,
-  };
-
-  envMap_hdri = std::make_unique<Texture2D>(createInfo);
-  createInfo.path = "Resources/IBL/Arches_E_PineTree_3k.irr.hdr";
-  createInfo.generateMips = false;
-  createInfo.minFilter = GL_LINEAR;
-  envMap_irradiance = std::make_unique<Texture2D>(createInfo);
+  LoadEnvironmentMap("Resources/IBL/Arches_E_PineTree_3k.hdr");
 
   auto sphereBatched = LoadObjBatch("Resources/Models/bunny.obj", materialManager, *vertexBuffer, *indexBuffer)[0];
 
@@ -1245,21 +1223,7 @@ void Renderer::LoadScene2()
   batchedObjects.clear();
   Scene2Lights();
 
-  TextureCreateInfo createInfo
-  {
-    .path = "Resources/IBL/Arches_E_PineTree_3k.hdr",
-    .sRGB = false,
-    .generateMips = true,
-    .HDR = true,
-    .minFilter = GL_LINEAR_MIPMAP_LINEAR,
-    .magFilter = GL_LINEAR,
-  };
-
-  envMap_hdri = std::make_unique<Texture2D>(createInfo);
-  createInfo.path = "Resources/IBL/Arches_E_PineTree_3k.irr.hdr";
-  createInfo.generateMips = false;
-  createInfo.minFilter = GL_LINEAR;
-  envMap_irradiance = std::make_unique<Texture2D>(createInfo);
+  LoadEnvironmentMap("Resources/IBL/Arches_E_PineTree_3k.hdr");
 
   //auto model = LoadObjBatch("Resources/Models/avocado/avocado.obj", materialManager, *vertexBuffer, *indexBuffer);
   auto model = LoadObjBatch("Resources/Models/motorcycle/Srad 750.obj", materialManager, *vertexBuffer, *indexBuffer);
@@ -1325,4 +1289,87 @@ void Renderer::SetupBuffers()
     }
   }
   drawIndirectBuffer = std::make_unique<StaticBuffer>(cmds.data(), sizeof(DrawElementsIndirectCommand) * cmds.size(), 0);
+}
+
+void Renderer::LoadEnvironmentMap(std::string path)
+{
+  TextureCreateInfo info
+  {
+    .path = path,
+    .sRGB = false,
+    .generateMips = true,
+    .HDR = true,
+    .minFilter = GL_LINEAR_MIPMAP_LINEAR,
+    .magFilter = GL_LINEAR,
+  };
+
+  envMap_hdri = std::make_unique<Texture2D>(info);
+
+  GLuint samplerID{};
+  glCreateSamplers(1, &samplerID);
+  glSamplerParameteri(samplerID, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glSamplerParameteri(samplerID, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glSamplerParameteri(samplerID, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glSamplerParameteri(samplerID, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  //glSamplerParameterf(samplerID, GL_TEXTURE_MIN_LOD, 8.f);
+  //glSamplerParameterf(samplerID, GL_TEXTURE_LOD_BIAS, 1.0f);
+  glBindSampler(0, samplerID);
+
+  float aspectRatio = (float)envMap_hdri->GetSize().x / envMap_hdri->GetSize().y;
+  glm::ivec2 dim;
+  dim.x = aspectRatio * 512;
+  dim.y = dim.x / aspectRatio;
+  if (irradianceMap)
+  {
+    glDeleteTextures(1, &irradianceMap);
+  }
+  glCreateTextures(GL_TEXTURE_2D, 1, &irradianceMap);
+  GLuint levels = (GLuint)glm::ceil(glm::log2((float)glm::min(dim.x, dim.y)));
+  glTextureParameteri(irradianceMap, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTextureParameteri(irradianceMap, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTextureParameteri(irradianceMap, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTextureParameteri(irradianceMap, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTextureParameterf(irradianceMap, GL_TEXTURE_MIN_LOD, 5.5f);
+  //glTextureParameterf(irradianceMap, GL_TEXTURE_LOD_BIAS, 6.0f);
+  glTextureStorage2D(irradianceMap, levels, GL_RGBA16F, dim.x, dim.y);
+
+  convolve_image(envMap_hdri->GetID(), irradianceMap, dim.x, dim.y);
+  glGenerateTextureMipmap(irradianceMap);
+
+  glBindSampler(0, 0);
+  glDeleteSamplers(1, &samplerID);
+}
+
+void Renderer::DrawPbrSphereGrid()
+{
+  auto& gbufBindless = Shader::shaders["gBufferBindless"];
+  gbufBindless->Bind();
+  gbufBindless->SetMat4("u_viewProj", cam.GetViewProj());
+
+  // draw PBR sphere grid
+  glVertexArrayVertexBuffer(vao, 0, sphere2.GetVBOID(), 0, sizeof(Vertex));
+  glVertexArrayElementBuffer(vao, sphere2.GetEBOID());
+  gbufBindless->SetBool("u_materialOverride", true);
+  gbufBindless->SetVec3("u_albedoOverride", albedoOverride);
+
+  int gridsize = 10;
+  for (int x = 0; x < gridsize; x++)
+  {
+    for (int y = 0; y < gridsize; y++)
+    {
+      Transform transform;
+      transform.translation = glm::vec3(x * 2, y * 2, 5);
+      transform.scale = glm::vec3(.0125);
+      ObjectUniforms uniform
+      {
+        .modelMatrix = transform.GetModelMatrix(),
+        .materialIndex = 0
+      };
+      StaticBuffer uniformBuffer2(&uniform, sizeof(ObjectUniforms), 0);
+      uniformBuffer2.BindBase(GL_SHADER_STORAGE_BUFFER, 0);
+      gbufBindless->SetFloat("u_roughnessOverride", (float)x / gridsize);
+      gbufBindless->SetFloat("u_metalnessOverride", (float)y / gridsize);
+      glDrawElements(GL_TRIANGLES, sphere2.GetVertexCount(), GL_UNSIGNED_INT, nullptr);
+    }
+  }
 }
