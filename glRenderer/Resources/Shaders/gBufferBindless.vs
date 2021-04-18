@@ -20,7 +20,6 @@ layout (binding = 0, std430) readonly buffer uniforms
 
 layout (location = 0) out VS_OUT
 {
-  vec3 vPos;
   vec3 vNormal;
   vec2 vTexCoord;
   flat uint vMaterialIndex;
@@ -31,8 +30,8 @@ void main()
   ObjectUniforms obj = objects[gl_DrawID];
   vMaterialIndex = obj.materialIndex;
   vTexCoord = aTexCoord;
-  vPos = vec3(obj.modelMatrix * vec4(aPos, 1.0));
+  vec3 wPos = vec3(obj.modelMatrix * vec4(aPos, 1.0));
   vNormal = vec3(obj.modelMatrix * vec4(aNormal, 0.0));
   //vNormal = mat3(obj.normalMatrix) * aNormal;
-  gl_Position = u_viewProj * vec4(vPos, 1.0);
+  gl_Position = u_viewProj * vec4(wPos, 1.0);
 }

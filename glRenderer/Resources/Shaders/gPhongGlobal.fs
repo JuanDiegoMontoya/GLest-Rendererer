@@ -13,7 +13,7 @@ layout (location = 0, binding = 0) uniform sampler2D gNormal;
 layout (location = 1, binding = 1) uniform sampler2D gAlbedo;
 layout (location = 2, binding = 2) uniform sampler2D gRMA;
 layout (location = 3, binding = 3) uniform sampler2D gDepth;
-layout (location = 4, binding = 4) uniform sampler2D shadowMap; // PCF, raw shadowmap
+layout (location = 4, binding = 4) uniform sampler2D ambientOcclusionTexture; // PCF, raw shadowmap
 layout (location = 5, binding = 5) uniform sampler2D filteredShadow; // ESM or VSM
 layout (location = 6, binding = 6) uniform sampler2D env_irradiance;
 layout (location = 7, binding = 7) uniform sampler2D env_radiance;
@@ -183,7 +183,7 @@ vec3 ComputeSpecularRadiance(vec3 N, vec3 V, vec3 F0, float roughness)
   vec3 tanX = normalize(cross(up, N));
   vec3 tanY = cross(N, tanX);
 
-  float NoV = max(dot(N, V), 0.0);
+  float NoV = abs(dot(N, V));
 
   vec3 accumColor = vec3(0.0);
   const uint samples = u_samples;
@@ -194,9 +194,9 @@ vec3 ComputeSpecularRadiance(vec3 N, vec3 V, vec3 F0, float roughness)
     vec3 L = normalize(-reflect(V, H));
     //vec3 L  = normalize(2.0 * dot(V, H) * H - V);
     
-    float NoL = max(dot(N, L), 0.0);
-    float NoH = max(dot(N, H), 0.0);
-    float VoH = max(dot(V, H), 0.0);
+    float NoL = abs(dot(N, L));
+    float NoH = abs(dot(N, H));
+    float VoH = abs(dot(V, H));
     float lod = CalcLOD(samples, N, H, roughness);
 
     vec3 F_ = fresnelSchlick(VoH, F0);
@@ -227,7 +227,9 @@ void main()
   vec4 RMA = texture(gRMA, vTexCoord);
   float roughness = clamp(RMA[0], 0.01, 1.0);
   float metalness = RMA[1];
-  float ambientOcclusion = RMA[2];
+  float ambientOcclusion = RMA[2]; // material AO
+  float ambientOcclusion2 = texture(ambientOcclusionTexture, vTexCoord).r; // SSAO
+  ambientOcclusion *= ambientOcclusion2;
   vec4 lightSpacePos = u_lightMatrix * vec4(vPos, 1.0);
 
   vec3 N = normalize(vNormal);
@@ -253,7 +255,7 @@ void main()
   {
     vec3 L = normalize(-u_globalLight_direction);
     vec3 H = normalize(V + L);
-    float NoL = max(dot(N, L), 0.0);
+    float NoL = abs(dot(N, L));
     vec3 radiance = u_globalLight_diffuse.rgb;
     float NDF = D_GGX(N, H, roughness);
     float G = G_Smith(N, V, L, roughness);
@@ -265,10 +267,10 @@ void main()
 
     // cook-torrance brdf
     vec3 numerator = NDF * G * F;
-    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
+    float denominator = 4.0 * abs(dot(N, V)) * abs(dot(N, L));
     vec3 specular = numerator / max(denominator, 0.001);
 
-    float cosTheta = max(dot(N, L), 0.0);
+    float cosTheta = abs(dot(N, L));
     vec3 local = (kD * albedo / M_PI + specular) * radiance * cosTheta;
 
     float shadow = 0.0;

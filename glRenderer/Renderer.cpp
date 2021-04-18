@@ -36,7 +36,7 @@ void Renderer::InitWindow()
   //glfwWindowHint(GLFW_SAMPLES, FRAMEBUFFER_MULTISAMPLES);
   glfwSwapInterval(1);
 
-  window = glfwCreateWindow(WIDTH, HEIGHT, "OpenGL", nullptr, nullptr);
+  window = glfwCreateWindow(WIDTH, HEIGHT, "GLest Rendererer", nullptr, nullptr);
   glfwMakeContextCurrent(window);
   Input::Init(window);
   Input::SetCursorVisible(cursorVisible);
@@ -277,13 +277,32 @@ void Renderer::MainLoop()
       }
     }
 
+    glBindFramebuffer(GL_FRAMEBUFFER, ssaoFbo);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBindTextureUnit(0, gDepth);
+    glBindTextureUnit(1, gNormal);
+
+    // SSAO pass
+    {
+      auto& ssao = Shader::shaders["ssao"];
+      ssao->Bind();
+      ssao->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
+      ssao->SetMat4("u_view", cam.GetView());
+      ssao->SetUInt("u_numSamples", ssao_samples);
+      ssao->SetFloat("u_delta", ssao_delta);
+      ssao->SetFloat("u_R", ssao_range);
+      ssao->SetFloat("u_s", ssao_s);
+      ssao->SetFloat("u_k", ssao_k);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindTextureUnit(0, gNormal);
     glBindTextureUnit(1, gAlbedo);
     glBindTextureUnit(2, gRMA);
     glBindTextureUnit(3, gDepth);
-    glBindTextureUnit(4, shadowDepth);
+    glBindTextureUnit(4, ambientOcclusionTexture);
     glBindTextureUnit(5, filteredTex);
     glBindTextureUnit(6, irradianceMap);
     glBindTextureUnit(7, envMap_hdri->GetID());
@@ -515,6 +534,10 @@ void Renderer::MainLoop()
     {
       drawFSTexture(irradianceMap);
     }
+    if (Input::IsKeyDown(GLFW_KEY_I))
+    {
+      drawFSTexture(ambientOcclusionTexture);
+    }
     if (Input::IsKeyPressed(GLFW_KEY_C))
     {
       Shader::shaders.erase("gPhongGlobal");
@@ -547,6 +570,12 @@ void Renderer::MainLoop()
           { "fullscreen_tri.vs", GL_VERTEX_SHADER },
           { "texture.fs", GL_FRAGMENT_SHADER }
         }));
+      Shader::shaders.erase("ssao");
+      Shader::shaders["ssao"].emplace(Shader(
+        {
+          { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+          { "ssao.fs", GL_FRAGMENT_SHADER }
+        }));
     }
 
     if (Input::IsKeyDown(GLFW_KEY_ESCAPE))
@@ -567,11 +596,21 @@ void Renderer::MainLoop()
 
 void Renderer::CreateFramebuffers()
 {
+  // create SSAO framebuffer
+  glCreateTextures(GL_TEXTURE_2D, 1, &ambientOcclusionTexture);
+  glTextureStorage2D(ambientOcclusionTexture, 1, GL_R8, WIDTH, HEIGHT);
+  glCreateFramebuffers(1, &ssaoFbo);
+  glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTexture, 0);
+  if (GLenum status = glCheckNamedFramebufferStatus(ssaoFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+  {
+    throw std::runtime_error("Failed to create SSAO framebuffer");
+  }
+
   // create HDR framebuffer
   glCreateTextures(GL_TEXTURE_2D, 1, &hdrColor);
   glTextureStorage2D(hdrColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &hdrDepth);
-  glTextureStorage2D(hdrDepth, 1, GL_DEPTH_COMPONENT32, WIDTH, HEIGHT);
+  glTextureStorage2D(hdrDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
   glCreateFramebuffers(1, &hdrfbo);
   glNamedFramebufferTexture(hdrfbo, GL_COLOR_ATTACHMENT0, hdrColor, 0);
   glNamedFramebufferTexture(hdrfbo, GL_DEPTH_ATTACHMENT, hdrDepth, 0);
@@ -717,7 +756,7 @@ void Renderer::CreateFramebuffers()
   glCreateTextures(GL_TEXTURE_2D, 1, &gRMA);
   glTextureStorage2D(gRMA, 1, GL_RGB10_A2, WIDTH, HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &gDepth);
-  glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32, WIDTH, HEIGHT);
+  glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
 
   // create gBuffer FBO
   glCreateFramebuffers(1, &gfbo);
@@ -774,7 +813,7 @@ void Renderer::InitScene()
   sphere = std::move(LoadObjMesh("Resources/Models/goodSphere.obj", materialManager)[0]);
   sphere2 = std::move(LoadObjMesh("Resources/Models/sphere2.obj", materialManager)[0]);
 
-  LoadScene2();
+  LoadScene1();
 }
 
 void Renderer::Cleanup()
@@ -824,6 +863,9 @@ void Renderer::Cleanup()
   glDeleteTextures(1, &hdrColor);
   glDeleteTextures(1, &hdrDepth);
   glDeleteFramebuffers(1, &hdrfbo);
+
+  glDeleteFramebuffers(1, &ssaoFbo);
+  glDeleteTextures(1, &ambientOcclusionTexture);
 
   glDeleteTextures(1, &irradianceMap);
 
@@ -1005,6 +1047,17 @@ void Renderer::DrawUI()
     ImGui::SliderFloat("Search distance", &ssr_searchDist, 1.0f, 50.0f);
     ImGui::SliderInt("Max steps", &ssr_maxRaySteps, 0, 100);
     ImGui::SliderInt("Binary search steps", &ssr_binarySearchSteps, 0, 10);
+
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNode("SSAO"))
+  {
+    ImGui::SliderInt("Samples", &ssao_samples, 0, 30);
+    ImGui::SliderFloat("Delta", &ssao_delta, 0.0001f, 0.01f, "%.4f", 2.0f);
+    ImGui::SliderFloat("Range", &ssao_range, 0.1f, 3.0f);
+    ImGui::SliderFloat("s", &ssao_s, 0.1f, 3.0f);
+    ImGui::SliderFloat("k", &ssao_k, 0.1f, 3.0f);
 
     ImGui::TreePop();
   }
@@ -1352,7 +1405,7 @@ void Renderer::DrawPbrSphereGrid()
   gbufBindless->SetBool("u_materialOverride", true);
   gbufBindless->SetVec3("u_albedoOverride", albedoOverride);
 
-  int gridsize = 10;
+  int gridsize = 4;
   for (int x = 0; x < gridsize; x++)
   {
     for (int y = 0; y < gridsize; y++)
@@ -1367,8 +1420,8 @@ void Renderer::DrawPbrSphereGrid()
       };
       StaticBuffer uniformBuffer2(&uniform, sizeof(ObjectUniforms), 0);
       uniformBuffer2.BindBase(GL_SHADER_STORAGE_BUFFER, 0);
-      gbufBindless->SetFloat("u_roughnessOverride", (float)x / gridsize);
-      gbufBindless->SetFloat("u_metalnessOverride", (float)y / gridsize);
+      gbufBindless->SetFloat("u_roughnessOverride", (float)x / (gridsize - 1));
+      gbufBindless->SetFloat("u_metalnessOverride", (float)y / (gridsize - 1));
       glDrawElements(GL_TRIANGLES, sphere2.GetVertexCount(), GL_UNSIGNED_INT, nullptr);
     }
   }

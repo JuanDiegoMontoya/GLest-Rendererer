@@ -64,6 +64,15 @@ private:
   void DrawPbrSphereGrid();
   bool drawPbrSphereGridQuestionMark = false;
 
+  // ssao stuff
+  GLuint ssaoFbo{};
+  GLuint ambientOcclusionTexture{};
+  int ssao_samples{ 20 };
+  float ssao_delta{ .001f };
+  float ssao_range{ 1.0f };
+  float ssao_s{ 1.0f };
+  float ssao_k{ 1.0f };
+
   // camera
   Camera cam;
   float fovDeg = 80.0f;

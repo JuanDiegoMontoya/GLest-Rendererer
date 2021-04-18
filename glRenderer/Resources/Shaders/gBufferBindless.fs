@@ -11,11 +11,11 @@ struct Material
   uvec2 ambientOcclusionHandle;
 };
 
-layout (location = 1) uniform bool u_materialOverride;
-layout (location = 2) uniform vec3 u_albedoOverride;
-layout (location = 3) uniform float u_roughnessOverride;
-layout (location = 4) uniform float u_metalnessOverride;
-layout (location = 5) uniform float u_ambientOcclusionOverride;
+layout (location = 3) uniform bool u_materialOverride;
+layout (location = 4) uniform vec3 u_albedoOverride;
+layout (location = 5) uniform float u_roughnessOverride;
+layout (location = 6) uniform float u_metalnessOverride;
+layout (location = 7) uniform float u_ambientOcclusionOverride;
 
 layout (binding = 1, std430) readonly buffer Materials
 {
@@ -24,7 +24,6 @@ layout (binding = 1, std430) readonly buffer Materials
 
 layout (location = 0) in VS_OUT
 {
-  vec3 vPos;
   vec3 vNormal;
   vec2 vTexCoord;
   flat uint vMaterialIndex;

@@ -191,6 +191,11 @@ export void CompileShaders()
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
       { "ssr.fs", GL_FRAGMENT_SHADER }
     }));
+  Shader::shaders["ssao"].emplace(Shader(
+    {
+      { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+      { "ssao.fs", GL_FRAGMENT_SHADER }
+    }));
   Shader::shaders["hdri_skybox"].emplace(Shader(
     {
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
