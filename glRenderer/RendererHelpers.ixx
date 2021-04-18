@@ -186,6 +186,11 @@ export void CompileShaders()
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
       { "atrous_volumetric.fs", GL_FRAGMENT_SHADER }
     }));
+  Shader::shaders["atrous_ssao"].emplace(Shader(
+    {
+      { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+      { "atrous_ssao.fs", GL_FRAGMENT_SHADER }
+    }));
   Shader::shaders["ssr"].emplace(Shader(
     {
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },

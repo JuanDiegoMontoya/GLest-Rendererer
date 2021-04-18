@@ -58,7 +58,7 @@ private:
   // pbr stuff
   std::unique_ptr<Texture2D> envMap_hdri;
   //std::unique_ptr<Texture2D> envMap_irradiance;
-  int numEnvSamples = 20;
+  int numEnvSamples = 10;
   GLuint irradianceMap{};
   void LoadEnvironmentMap(std::string path);
   void DrawPbrSphereGrid();
@@ -67,11 +67,20 @@ private:
   // ssao stuff
   GLuint ssaoFbo{};
   GLuint ambientOcclusionTexture{};
-  int ssao_samples{ 20 };
+  GLuint ambientOcclusionTextureBlurred{};
+  bool ssao_enabled = true;
+  int ssao_samples{ 10 };
   float ssao_delta{ .001f };
-  float ssao_range{ 1.0f };
-  float ssao_s{ 1.0f };
+  float ssao_range{ 1.1f };
+  float ssao_s{ 1.8f };
   float ssao_k{ 1.0f };
+  float ssao_atrous_kernel[9] = { // std dev = 2
+    0.028532f, 0.067234f, 0.124009f, 0.179044f, 0.20236f, 0.179044f, 0.124009f, 0.067234f, 0.028532f };
+  float ssao_atrous_offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
+  float ssao_atrous_passes = 2;
+  float ssao_atrous_n_phi = 1.0f;
+  float ssao_atrous_p_phi = 1.0f;
+  float ssao_atrous_step_width = 1.0f;
 
   // camera
   Camera cam;
@@ -105,11 +114,11 @@ private:
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex;
   GLuint volumetricsFbo{}, volumetricsTex{}, volumetricsTexBlur{};
-  int VOLUMETRIC_BLUR_PASSES = 2;
+  int VOLUMETRIC_BLUR_PASSES = 1;
   int VOLUMETRIC_BLUR_STRENGTH = 2;
   const uint32_t VOLUMETRIC_WIDTH = WIDTH / 1;
   const uint32_t VOLUMETRIC_HEIGHT = HEIGHT / 1;
-  GLint volumetric_steps = 50;
+  GLint volumetric_steps = 20;
   float volumetric_intensity = .02f;
   float volumetric_distToFull = 20.0f;
   float volumetric_noiseOffset = 1.0f;
@@ -119,8 +128,6 @@ private:
   GLuint atrousFbo{}, atrousTex{};
   unsigned atrousPasses = 1;
   float c_phi = 0.0001f;
-  float n_phi = 1.0f;
-  float p_phi = 1.0f;
   float stepWidth = 1.0f;
   const float atrouskernel[25] = { // 5x5 gaussian kernel with std dev=1.75 (I think)
     0.015026f, 0.028569f, 0.035391f, 0.028569f, 0.015026f,

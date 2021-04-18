@@ -278,11 +278,14 @@ void Renderer::MainLoop()
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, ssaoFbo);
-    glClear(GL_COLOR_BUFFER_BIT);
+    //glClear(GL_COLOR_BUFFER_BIT);
+    float unovec[] = { 1, 1, 1, 1 };
+    glClearNamedFramebufferfv(ssaoFbo, GL_COLOR, 0, unovec);
     glBindTextureUnit(0, gDepth);
     glBindTextureUnit(1, gNormal);
 
     // SSAO pass
+    if (ssao_enabled)
     {
       auto& ssao = Shader::shaders["ssao"];
       ssao->Bind();
@@ -293,7 +296,34 @@ void Renderer::MainLoop()
       ssao->SetFloat("u_R", ssao_range);
       ssao->SetFloat("u_s", ssao_s);
       ssao->SetFloat("u_k", ssao_k);
+      glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTexture, 0);
       glDrawArrays(GL_TRIANGLES, 0, 3);
+
+      if (ssao_atrous_passes > 0)
+      {
+        glBindTextureUnit(1, gDepth);
+        glBindTextureUnit(2, gNormal);
+        auto& ssaoblur = Shader::shaders["atrous_ssao"];
+        ssaoblur->Bind();
+        ssaoblur->SetFloat("n_phi", ssao_atrous_n_phi);
+        ssaoblur->SetFloat("p_phi", ssao_atrous_p_phi);
+        ssaoblur->SetFloat("stepwidth", ssao_atrous_step_width);
+        ssaoblur->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
+        ssaoblur->SetIVec2("u_resolution", WIDTH, HEIGHT);
+        ssaoblur->Set1FloatArray("kernel[0]", ssao_atrous_kernel);
+        ssaoblur->Set1FloatArray("offsets[0]", ssao_atrous_offsets);
+        for (int i = 0; i < ssao_atrous_passes; i++)
+        {
+          ssaoblur->SetBool("u_horizontal", false);
+          glBindTextureUnit(0, ambientOcclusionTexture);
+          glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTextureBlurred, 0);
+          glDrawArrays(GL_TRIANGLES, 0, 3);
+          ssaoblur->SetBool("u_horizontal", true);
+          glBindTextureUnit(0, ambientOcclusionTextureBlurred);
+          glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTexture, 0);
+          glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
+      }
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
@@ -538,6 +568,10 @@ void Renderer::MainLoop()
     {
       drawFSTexture(ambientOcclusionTexture);
     }
+    if (Input::IsKeyDown(GLFW_KEY_U))
+    {
+      drawFSTexture(ambientOcclusionTextureBlurred);
+    }
     if (Input::IsKeyPressed(GLFW_KEY_C))
     {
       Shader::shaders.erase("gPhongGlobal");
@@ -599,8 +633,11 @@ void Renderer::CreateFramebuffers()
   // create SSAO framebuffer
   glCreateTextures(GL_TEXTURE_2D, 1, &ambientOcclusionTexture);
   glTextureStorage2D(ambientOcclusionTexture, 1, GL_R8, WIDTH, HEIGHT);
+  glCreateTextures(GL_TEXTURE_2D, 1, &ambientOcclusionTextureBlurred);
+  glTextureStorage2D(ambientOcclusionTextureBlurred, 1, GL_R8, WIDTH, HEIGHT);
   glCreateFramebuffers(1, &ssaoFbo);
   glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTexture, 0);
+  glNamedFramebufferDrawBuffer(ssaoFbo, GL_COLOR_ATTACHMENT0);
   if (GLenum status = glCheckNamedFramebufferStatus(ssaoFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
   {
     throw std::runtime_error("Failed to create SSAO framebuffer");
@@ -866,6 +903,7 @@ void Renderer::Cleanup()
 
   glDeleteFramebuffers(1, &ssaoFbo);
   glDeleteTextures(1, &ambientOcclusionTexture);
+  glDeleteTextures(1, &ambientOcclusionTextureBlurred);
 
   glDeleteTextures(1, &irradianceMap);
 
@@ -1030,8 +1068,6 @@ void Renderer::DrawUI()
     ImGui::SameLine(); ImGui::RadioButton("Two", &passes, 2);
     atrousPasses = passes;
     ImGui::SliderFloat("c_phi", &c_phi, .0001f, 10.0f, "%.4f", 4.0f);
-    //ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
-    //ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Step width", &stepWidth, 0.5f, 2.0f, "%.3f");
 
     ImGui::TreePop();
@@ -1051,6 +1087,8 @@ void Renderer::DrawUI()
     ImGui::TreePop();
   }
 
+  ImGui::Checkbox("##ssao", &ssao_enabled);
+  ImGui::SameLine();
   if (ImGui::TreeNode("SSAO"))
   {
     ImGui::SliderInt("Samples", &ssao_samples, 0, 30);
@@ -1058,6 +1096,8 @@ void Renderer::DrawUI()
     ImGui::SliderFloat("Range", &ssao_range, 0.1f, 3.0f);
     ImGui::SliderFloat("s", &ssao_s, 0.1f, 3.0f);
     ImGui::SliderFloat("k", &ssao_k, 0.1f, 3.0f);
+    //ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
+    //ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
 
     ImGui::TreePop();
   }

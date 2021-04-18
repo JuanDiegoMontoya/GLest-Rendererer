@@ -24,6 +24,7 @@ int main()
 // tiled/clustered shading
 // correctly account for shininess term in SSR
 // fix normal mapping (again)
+// more flexible model loader (assimp or similar)
 
 // DONE
 // imgui
