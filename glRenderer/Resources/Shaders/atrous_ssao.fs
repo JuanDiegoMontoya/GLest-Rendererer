@@ -1,6 +1,6 @@
 #version 460 core
 #include "common.h"
-#define KERNEL_SIZE 9
+#define KERNEL_SIZE 13
 
 layout (location = 0) in vec2 vTexCoord;
 
@@ -14,7 +14,7 @@ layout (location = 7) uniform mat4 u_invViewProj;
 layout (location = 8) uniform ivec2 u_resolution;
 layout (location = 9) uniform bool u_horizontal;
 layout (location = 10) uniform float kernel[KERNEL_SIZE];
-layout (location = 19) uniform float offsets[KERNEL_SIZE];
+layout (location = 23) uniform float offsets[KERNEL_SIZE];
 
 layout (location = 0) out vec4 fragColor;
 

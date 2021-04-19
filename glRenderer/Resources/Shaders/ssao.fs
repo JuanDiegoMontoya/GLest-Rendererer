@@ -35,7 +35,7 @@ void main()
   float c = 0.1 * u_R;
   
   ivec2 fragCoord = ivec2(gl_FragCoord.xy);
-  float phi = 30.0 * float(fragCoord.x ^ fragCoord.y) + 10.0 * float(fragCoord.x * fragCoord.y);
+  int phi = 30 * fragCoord.x ^ fragCoord.y + 10 * fragCoord.x * fragCoord.y;
 
   float sum = 0.0;
   for (uint i = 0; i < u_numSamples; i++)

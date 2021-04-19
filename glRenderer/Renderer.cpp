@@ -291,7 +291,7 @@ void Renderer::MainLoop()
       ssao->Bind();
       ssao->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
       ssao->SetMat4("u_view", cam.GetView());
-      ssao->SetUInt("u_numSamples", ssao_samples);
+      ssao->SetUInt("u_numSamples", ssao_samples_near);
       ssao->SetFloat("u_delta", ssao_delta);
       ssao->SetFloat("u_R", ssao_range);
       ssao->SetFloat("u_s", ssao_s);
@@ -630,9 +630,11 @@ void Renderer::MainLoop()
 
 void Renderer::CreateFramebuffers()
 {
+  GLint swizzleMask[] = { GL_RED, GL_RED, GL_RED, GL_ONE };
   // create SSAO framebuffer
   glCreateTextures(GL_TEXTURE_2D, 1, &ambientOcclusionTexture);
   glTextureStorage2D(ambientOcclusionTexture, 1, GL_R8, WIDTH, HEIGHT);
+  glTextureParameteriv(ambientOcclusionTexture, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
   glCreateTextures(GL_TEXTURE_2D, 1, &ambientOcclusionTextureBlurred);
   glTextureStorage2D(ambientOcclusionTextureBlurred, 1, GL_R8, WIDTH, HEIGHT);
   glCreateFramebuffers(1, &ssaoFbo);
@@ -675,7 +677,6 @@ void Renderer::CreateFramebuffers()
   // create volumetrics texture + fbo + intermediate (for blurring)
   glCreateTextures(GL_TEXTURE_2D, 1, &volumetricsTex);
   glTextureStorage2D(volumetricsTex, 1, GL_R16F, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
-  GLint swizzleMask[] = { GL_RED, GL_RED, GL_RED, GL_ONE };
   glTextureParameteriv(volumetricsTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
   glTextureParameteri(volumetricsTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTextureParameteri(volumetricsTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -1091,13 +1092,17 @@ void Renderer::DrawUI()
   ImGui::SameLine();
   if (ImGui::TreeNode("SSAO"))
   {
-    ImGui::SliderInt("Samples", &ssao_samples, 0, 30);
+    ImGui::SliderInt("Samples", &ssao_samples_near, 0, 30);
     ImGui::SliderFloat("Delta", &ssao_delta, 0.0001f, 0.01f, "%.4f", 2.0f);
     ImGui::SliderFloat("Range", &ssao_range, 0.1f, 3.0f);
     ImGui::SliderFloat("s", &ssao_s, 0.1f, 3.0f);
     ImGui::SliderFloat("k", &ssao_k, 0.1f, 3.0f);
-    //ImGui::SliderFloat("n_phi", &n_phi, .001f, 10.0f, "%.3f", 2.0f);
-    //ImGui::SliderFloat("p_phi", &p_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::Text("A-Trous");
+    ImGui::Separator();
+    ImGui::SliderInt("Passes", &ssao_atrous_passes, 0, 5);
+    ImGui::SliderFloat("n_phi", &ssao_atrous_n_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("p_phi", &ssao_atrous_p_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Step width", &ssao_atrous_step_width, 0.5f, 2.0f, "%.3f");
 
     ImGui::TreePop();
   }

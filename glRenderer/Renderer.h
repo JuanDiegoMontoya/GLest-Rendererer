@@ -69,18 +69,25 @@ private:
   GLuint ambientOcclusionTexture{};
   GLuint ambientOcclusionTextureBlurred{};
   bool ssao_enabled = true;
-  int ssao_samples{ 10 };
+  int ssao_samples_near{ 10 };
+  int ssao_samples_mid{ 10 };
+  int ssao_samples_far{ 4 };
+  float ssao_near_extent{ 10.0f };
+  float ssao_mid_extent{ 30.0f };
+  float ssao_far_extent{ 70.0f };
   float ssao_delta{ .001f };
   float ssao_range{ 1.1f };
   float ssao_s{ 1.8f };
   float ssao_k{ 1.0f };
-  float ssao_atrous_kernel[9] = { // std dev = 2
-    0.028532f, 0.067234f, 0.124009f, 0.179044f, 0.20236f, 0.179044f, 0.124009f, 0.067234f, 0.028532f };
-  float ssao_atrous_offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
-  float ssao_atrous_passes = 2;
+  float ssao_atrous_kernel[13] = { // std dev = 2
+    //0.028532f, 0.067234f, 0.124009f, 0.179044f, 0.20236f, 0.179044f, 0.124009f, 0.067234f, 0.028532f };
+    0.018816, 0.034474, 0.056577, 0.083173, 0.109523, 0.129188, 0.136498, 0.129188, 0.109523, 0.083173, 0.056577, 0.034474, 0.018816 };
+  //float ssao_atrous_offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
+  float ssao_atrous_offsets[13] = { -6, -5, -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5, 6 };
+  int ssao_atrous_passes = 2;
   float ssao_atrous_n_phi = 1.0f;
   float ssao_atrous_p_phi = 1.0f;
-  float ssao_atrous_step_width = 1.0f;
+  float ssao_atrous_step_width = 1.6f;
 
   // camera
   Camera cam;
