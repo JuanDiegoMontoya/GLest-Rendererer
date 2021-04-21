@@ -255,7 +255,7 @@ void main()
   {
     vec3 L = normalize(-u_globalLight_direction);
     vec3 H = normalize(V + L);
-    float NoL = abs(dot(N, L));
+    float NoL = max(dot(N, L), 0.0);
     vec3 radiance = u_globalLight_diffuse.rgb;
     float NDF = D_GGX(N, H, roughness);
     float G = G_Smith(N, V, L, roughness);

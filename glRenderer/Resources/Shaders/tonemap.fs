@@ -18,7 +18,8 @@ void main()
 {
   vec3 hdrColor = texture(u_hdrBuffer, vTexCoord).rgb;
   vec3 mapped = ACESFitted(hdrColor) * u_exposureFactor * readExposure;
-  
+  mapped = pow(mapped, vec3(1 / 2.2));
+
   fragColor = vec4(mapped, 1.0);
 }
 

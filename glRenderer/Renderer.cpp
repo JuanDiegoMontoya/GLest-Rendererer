@@ -125,6 +125,19 @@ void Renderer::MainLoop()
       cam.Update(dt);
     }
 
+    if (Input::IsKeyDown(GLFW_KEY_LEFT_BRACKET))
+    {
+      magnifierScale = glm::max(0.002f, magnifierScale * (1.0f - 1.5f * dt));
+    }
+    if (Input::IsKeyDown(GLFW_KEY_RIGHT_BRACKET))
+    {
+      magnifierScale = glm::min(0.1f, magnifierScale * (1.0f + 1.5f * dt));
+    }
+    if (Input::IsKeyPressed(GLFW_KEY_SPACE))
+    {
+      magnifierLock = !magnifierLock;
+    }
+
     if (Input::IsKeyDown(GLFW_KEY_Q) || Input::IsKeyDown(GLFW_KEY_E))
     {
       if (Input::IsKeyDown(GLFW_KEY_E))
@@ -515,7 +528,29 @@ void Renderer::MainLoop()
     // tone mapping + gamma correction pass
     ApplyTonemapping(dt);
 
+    glBindFramebuffer(GL_FRAMEBUFFER, postprocessFbo);
+    glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, legitFinalImage, 0);
+    if (fxaa_enabled)
+    {
+      glBindTextureUnit(0, postprocessPostSRGB);
+      auto& fxaaShader = Shader::shaders["fxaa"];
+      fxaaShader->Bind();
+      fxaaShader->SetVec2("u_invScreenSize", 1.0f / WIDTH, 1.0f / HEIGHT);
+      fxaaShader->SetFloat("u_contrastThreshold", fxaa_contrastThreshold);
+      fxaaShader->SetFloat("u_relativeThreshold", fxaa_relativeThreshold);
+      fxaaShader->SetFloat("u_blendStrength", fxaa_blendStrength);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+    else
+    {
+      drawFSTexture(postprocessPostSRGB);
+    }
+    glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, postprocessColor, 0);
 
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    drawFSTexture(legitFinalImage);
+
+#pragma region yeah
     if (Input::IsKeyDown(GLFW_KEY_1))
     {
       drawFSTexture(gAlbedo);
@@ -611,6 +646,7 @@ void Renderer::MainLoop()
           { "ssao.fs", GL_FRAGMENT_SHADER }
         }));
     }
+#pragma endregion
 
     if (Input::IsKeyDown(GLFW_KEY_ESCAPE))
     {
@@ -814,6 +850,12 @@ void Renderer::CreateFramebuffers()
   // create postprocess (HDR) framebuffer
   glCreateTextures(GL_TEXTURE_2D, 1, &postprocessColor);
   glTextureStorage2D(postprocessColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
+  glCreateTextures(GL_TEXTURE_2D, 1, &postprocessPostSRGB);
+  glTextureStorage2D(postprocessPostSRGB, 1, GL_RGBA8, WIDTH, HEIGHT);
+  glCreateTextures(GL_TEXTURE_2D, 1, &legitFinalImage);
+  glTextureStorage2D(legitFinalImage, 1, GL_RGBA8, WIDTH, HEIGHT);
+  glTextureParameteri(legitFinalImage, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTextureParameteri(legitFinalImage, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glCreateFramebuffers(1, &postprocessFbo);
   glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, postprocessColor, 0);
   glNamedFramebufferTexture(postprocessFbo, GL_DEPTH_ATTACHMENT, gDepth, 0);
@@ -1102,8 +1144,17 @@ void Renderer::DrawUI()
     ImGui::SliderInt("Passes", &ssao_atrous_passes, 0, 5);
     ImGui::SliderFloat("n_phi", &ssao_atrous_n_phi, .001f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("p_phi", &ssao_atrous_p_phi, .001f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Step width", &ssao_atrous_step_width, 0.5f, 2.0f, "%.3f");
+    ImGui::SliderFloat("Step Width", &ssao_atrous_step_width, 0.5f, 2.0f, "%.3f");
+    ImGui::TreePop();
+  }
 
+  ImGui::Checkbox("##fxaa", &fxaa_enabled);
+  ImGui::SameLine();
+  if (ImGui::TreeNode("FXAA"))
+  {
+    ImGui::SliderFloat("Abs. Threshold", &fxaa_contrastThreshold, .03f, .09f);
+    ImGui::SliderFloat("Rel. Threshold", &fxaa_relativeThreshold, .125f, .25f);
+    ImGui::SliderFloat("Blend Strength", &fxaa_blendStrength, 0.0f, 1.0f);
     ImGui::TreePop();
   }
 
@@ -1142,9 +1193,9 @@ void Renderer::DrawUI()
 
   if (ImGui::TreeNode("Postprocessing"))
   {
-    ImGui::SliderFloat("Luminance", &targetLuminance, 0.01f, 1.0f);
-    ImGui::SliderFloat("Exposure factor", &exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Adjustment speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Lum Target", &targetLuminance, 0.01f, 1.0f);
+    ImGui::SliderFloat("Exposure Factor", &exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Adjustment Speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Min exposure", &minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Max exposure", &maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
 
@@ -1152,12 +1203,25 @@ void Renderer::DrawUI()
   }
 
   ImGui::End();
+
+  ImGui::Begin(("Magnifier: " + std::string(magnifierLock ? "Locked" : "Unlocked") + "###mag").c_str());
+  ImGui::SliderFloat("Scale", &magnifierScale, 0.002f, 0.1f, "%.4f", 2.0f);
+  
+  glm::vec2 mp = magnifierLock ? magnifier_lastMouse : Input::GetScreenPos();
+  magnifier_lastMouse = mp;
+  mp.y = HEIGHT - mp.y;
+  mp /= glm::vec2(WIDTH, HEIGHT);
+  float ar = (float)WIDTH / (float)HEIGHT;
+  glm::vec2 uv0{ mp.x - magnifierScale, mp.y + magnifierScale * ar };
+  glm::vec2 uv1{ mp.x + magnifierScale, mp.y - magnifierScale * ar };
+  uv0 = glm::clamp(uv0, glm::vec2(0), glm::vec2(1));
+  uv1 = glm::clamp(uv1, glm::vec2(0), glm::vec2(1));
+  ImGui::Image((void*)legitFinalImage, ImVec2(300, 300), ImVec2(uv0.x, uv0.y), ImVec2(uv1.x, uv1.y));
+  ImGui::End();
 }
 
 void Renderer::ApplyTonemapping(float dt)
 {
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glEnable(GL_FRAMEBUFFER_SRGB);
   glDisable(GL_BLEND);
 
   glBindTextureUnit(1, postprocessColor);
@@ -1209,9 +1273,9 @@ void Renderer::ApplyTonemapping(float dt)
   shdr->Bind();
   shdr->SetFloat("u_exposureFactor", exposureFactor);
   shdr->SetInt("u_hdrBuffer", 1);
+  glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, postprocessPostSRGB, 0);
   glDrawArrays(GL_TRIANGLES, 0, 3);
-
-  glDisable(GL_FRAMEBUFFER_SRGB);
+  glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, postprocessColor, 0);
 }
 
 void Renderer::Scene1Lights()

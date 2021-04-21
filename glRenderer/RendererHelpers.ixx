@@ -152,6 +152,11 @@ export void CompileShaders()
       { "fullscreen_tri.vs", GL_VERTEX_SHADER },
       { "tonemap.fs", GL_FRAGMENT_SHADER }
     }));
+  Shader::shaders["fxaa"].emplace(Shader(
+    {
+      { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+      { "fxaa.fs", GL_FRAGMENT_SHADER }
+    }));
   Shader::shaders["shadow"].emplace(Shader(
     { { "shadow.vs", GL_VERTEX_SHADER },
     }));

@@ -69,8 +69,8 @@ private:
   GLuint ambientOcclusionTexture{};
   GLuint ambientOcclusionTextureBlurred{};
   bool ssao_enabled = true;
-  int ssao_samples_near{ 10 };
-  int ssao_samples_mid{ 10 };
+  int ssao_samples_near{ 12 };
+  int ssao_samples_mid{ 8 };
   int ssao_samples_far{ 4 };
   float ssao_near_extent{ 10.0f };
   float ssao_mid_extent{ 30.0f };
@@ -85,8 +85,8 @@ private:
   //float ssao_atrous_offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
   float ssao_atrous_offsets[13] = { -6, -5, -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5, 6 };
   int ssao_atrous_passes = 2;
-  float ssao_atrous_n_phi = 1.0f;
-  float ssao_atrous_p_phi = 1.0f;
+  float ssao_atrous_n_phi = .2f;
+  float ssao_atrous_p_phi = .5f;
   float ssao_atrous_step_width = 1.6f;
 
   // camera
@@ -103,6 +103,10 @@ private:
   std::unique_ptr<StaticBuffer> materialsBuffer; // material info
   std::unique_ptr<StaticBuffer> drawIndirectBuffer; // DrawElementsIndirectCommand
   MaterialManager materialManager;
+  GLuint legitFinalImage{};
+  float magnifierScale{ .025f };
+  bool magnifierLock{ false };
+  glm::vec2 magnifier_lastMouse{};
 
   // lighting
   std::vector<PointLight> localLights;
@@ -118,6 +122,12 @@ private:
   float metalnessOverride{ 1.0f };
   float ambientOcclusionOverride{ 1.0f };
 
+  // fxaa
+  bool fxaa_enabled = true;
+  float fxaa_contrastThreshold{ 0.0312f };
+  float fxaa_relativeThreshold{ 0.125f };
+  float fxaa_blendStrength{ 1.0f };
+
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex;
   GLuint volumetricsFbo{}, volumetricsTex{}, volumetricsTexBlur{};
@@ -126,7 +136,7 @@ private:
   const uint32_t VOLUMETRIC_WIDTH = WIDTH / 1;
   const uint32_t VOLUMETRIC_HEIGHT = HEIGHT / 1;
   GLint volumetric_steps = 20;
-  float volumetric_intensity = .02f;
+  float volumetric_intensity = .1f;
   float volumetric_distToFull = 20.0f;
   float volumetric_noiseOffset = 1.0f;
   bool volumetric_enabled = true;
@@ -151,7 +161,7 @@ private:
 
   // deferred stuff
   GLuint gfbo{}, gAlbedo{}, gNormal{}, gDepth{}, gRMA{}; // gRMA = roughness, metalness, ambient occlusion
-  GLuint postprocessFbo{}, postprocessColor{};
+  GLuint postprocessFbo{}, postprocessColor{}, postprocessPostSRGB{};
 
   // ssr stuff
   GLuint ssrFbo{}, ssrTex{}, ssrTexBlur{};
