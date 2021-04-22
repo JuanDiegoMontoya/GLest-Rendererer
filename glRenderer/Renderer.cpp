@@ -34,7 +34,7 @@ void Renderer::InitWindow()
   glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   //glfwWindowHint(GLFW_SAMPLES, FRAMEBUFFER_MULTISAMPLES);
-  glfwSwapInterval(1);
+  glfwSwapInterval(vsyncEnabled);
 
   window = glfwCreateWindow(WIDTH, HEIGHT, "GLest Rendererer", nullptr, nullptr);
   glfwMakeContextCurrent(window);
@@ -538,7 +538,8 @@ void Renderer::MainLoop()
       fxaaShader->SetVec2("u_invScreenSize", 1.0f / WIDTH, 1.0f / HEIGHT);
       fxaaShader->SetFloat("u_contrastThreshold", fxaa_contrastThreshold);
       fxaaShader->SetFloat("u_relativeThreshold", fxaa_relativeThreshold);
-      fxaaShader->SetFloat("u_blendStrength", fxaa_blendStrength);
+      fxaaShader->SetFloat("u_pixelBlendStrength", fxaa_pixelBlendStrength);
+      fxaaShader->SetFloat("u_edgeBlendStrength", fxaa_edgeBlendStrength);
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
     else
@@ -609,6 +610,12 @@ void Renderer::MainLoop()
     }
     if (Input::IsKeyPressed(GLFW_KEY_C))
     {
+      Shader::shaders.erase("fxaa");
+      Shader::shaders["fxaa"].emplace(Shader(
+        {
+          { "fullscreen_tri.vs", GL_VERTEX_SHADER },
+          { "fxaa.fs", GL_FRAGMENT_SHADER }
+        }));
       Shader::shaders.erase("gPhongGlobal");
       Shader::shaders["gPhongGlobal"].emplace(Shader(
         {
@@ -852,6 +859,8 @@ void Renderer::CreateFramebuffers()
   glTextureStorage2D(postprocessColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &postprocessPostSRGB);
   glTextureStorage2D(postprocessPostSRGB, 1, GL_RGBA8, WIDTH, HEIGHT);
+  glTextureParameteri(postprocessPostSRGB, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTextureParameteri(postprocessPostSRGB, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glCreateTextures(GL_TEXTURE_2D, 1, &legitFinalImage);
   glTextureStorage2D(legitFinalImage, 1, GL_RGBA8, WIDTH, HEIGHT);
   glTextureParameteri(legitFinalImage, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -958,6 +967,10 @@ void Renderer::DrawUI()
 {
   ImGui::Begin("Scene");
 
+  if (ImGui::Checkbox("vsync", &vsyncEnabled))
+  {
+    glfwSwapInterval(vsyncEnabled);
+  }
   if (ImGui::SliderFloat("FoV", &fovDeg, 30.0f, 100.0f))
   {
     cam.SetFoV(fovDeg);
@@ -1154,7 +1167,8 @@ void Renderer::DrawUI()
   {
     ImGui::SliderFloat("Abs. Threshold", &fxaa_contrastThreshold, .03f, .09f);
     ImGui::SliderFloat("Rel. Threshold", &fxaa_relativeThreshold, .125f, .25f);
-    ImGui::SliderFloat("Blend Strength", &fxaa_blendStrength, 0.0f, 1.0f);
+    ImGui::SliderFloat("Pixel Blend", &fxaa_pixelBlendStrength, 0.0f, 1.0f);
+    ImGui::SliderFloat("Edge Blend", &fxaa_edgeBlendStrength, 0.0f, 1.0f);
     ImGui::TreePop();
   }
 

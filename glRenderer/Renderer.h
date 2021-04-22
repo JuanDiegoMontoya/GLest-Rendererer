@@ -50,6 +50,7 @@ private:
   GLuint vao{};
   bool cursorVisible = true;
   float deviceAnisotropy{ 0.0f };
+  bool vsyncEnabled{ true };
 
   void LoadScene1();
   void LoadScene2();
@@ -126,7 +127,8 @@ private:
   bool fxaa_enabled = true;
   float fxaa_contrastThreshold{ 0.0312f };
   float fxaa_relativeThreshold{ 0.125f };
-  float fxaa_blendStrength{ 1.0f };
+  float fxaa_pixelBlendStrength{ 1.0f };
+  float fxaa_edgeBlendStrength{ 1.0f };
 
   // volumetric stuff
   std::unique_ptr<Texture2D> bluenoiseTex;

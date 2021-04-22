@@ -48,7 +48,7 @@ void main()
 
     vec3 Pi = WorldPosFromDepthUV(texture(gDepth, uv).x, uv, u_invViewProj); // sample world position
     float di = -(u_view * vec4(Pi, 1.0)).z; // world/view-space sample depth
-    vec3 omega_i = Pi - P; // based on Pi
+    vec3 omega_i = Pi - P;
 
     float numerator = max(0.0, dot(N, omega_i) - u_delta * di) * hstep(u_R - length(omega_i));
     float denom = max(c * c, dot(omega_i, omega_i));

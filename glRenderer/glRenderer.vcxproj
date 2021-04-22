@@ -176,7 +176,7 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AdditionalDependencies>opengl32.lib;glfw3.lib;shaderc_combined.lib;msvcrt.lib;msvcmrt.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)lib\glfw-3.3-win64\lib-vc2019;$(SolutionDir)lib\shaderc\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
