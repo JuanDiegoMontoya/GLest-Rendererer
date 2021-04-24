@@ -1,6 +1,6 @@
 #version 460 core
 #include "common.h"
-#define KERNEL_SIZE 13
+#define KERNEL_SIZE 5
 
 layout (location = 0) in vec2 vTexCoord;
 

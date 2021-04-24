@@ -80,15 +80,16 @@ private:
   float ssao_range{ 1.1f };
   float ssao_s{ 1.8f };
   float ssao_k{ 1.0f };
-  float ssao_atrous_kernel[13] = { // std dev = 2
+  float ssao_atrous_kernel[5] = { // std dev = 2
     //0.028532f, 0.067234f, 0.124009f, 0.179044f, 0.20236f, 0.179044f, 0.124009f, 0.067234f, 0.028532f };
-    0.018816, 0.034474, 0.056577, 0.083173, 0.109523, 0.129188, 0.136498, 0.129188, 0.109523, 0.083173, 0.056577, 0.034474, 0.018816 };
+    0.0625f, 0.25f, 0.375f, 0.25f, 0.0625f };
+  float ssao_atrous_offsets[5] = { -2.0f, -1.0f, 0.0f, 1.0f, 2.0f };
   //float ssao_atrous_offsets[9] = { -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f };
-  float ssao_atrous_offsets[13] = { -6, -5, -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5, 6 };
-  int ssao_atrous_passes = 2;
-  float ssao_atrous_n_phi = .2f;
+  //float ssao_atrous_offsets[13] = { -6, -5, -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5, 6 };
+  int ssao_atrous_passes = 3;
+  float ssao_atrous_n_phi = .1f;
   float ssao_atrous_p_phi = .5f;
-  float ssao_atrous_step_width = 1.6f;
+  float ssao_atrous_step_width = 1.0f;
 
   // camera
   Camera cam;
@@ -149,11 +150,11 @@ private:
   float c_phi = 0.0001f;
   float stepWidth = 1.0f;
   const float atrouskernel[25] = { // 5x5 gaussian kernel with std dev=1.75 (I think)
-    0.015026f, 0.028569f, 0.035391f, 0.028569f, 0.015026f,
-    0.028569f, 0.054318f, 0.067288f, 0.054318f, 0.028569f,
-    0.035391f, 0.067288f, 0.083355f, 0.067288f, 0.035391f,
-    0.028569f, 0.054318f, 0.067288f, 0.054318f, 0.028569f,
-    0.015026f, 0.028569f, 0.035391f, 0.028569f, 0.015026f };
+  1.0 / 256.0, 4.0 / 256.0, 6.0 / 256.0, 4.0 / 256.0, 1.0 / 256.0,
+  4.0 / 256.0, 16.0 / 256.0, 24.0 / 256.0, 16.0 / 256.0, 4.0 / 256.0,
+  6.0 / 256.0, 24.0 / 256.0, 36.0 / 256.0, 24.0 / 256.0, 6.0 / 256.0,
+  4.0 / 256.0, 16.0 / 256.0, 24.0 / 256.0, 16.0 / 256.0, 4.0 / 256.0,
+  1.0 / 256.0, 4.0 / 256.0, 6.0 / 256.0, 4.0 / 256.0, 1.0 / 256.0 };
   const glm::vec2 atrouskerneloffsets[25] = {
     { -2, 2 }, { -1, 2 }, { 0, 2 }, { 1, 2 }, { 2, 2 },
     { -2, 1 }, { -1, 1 }, { 0, 1 }, { 1, 1 }, { 2, 1 },

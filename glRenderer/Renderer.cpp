@@ -327,6 +327,12 @@ void Renderer::MainLoop()
         ssaoblur->Set1FloatArray("offsets[0]", ssao_atrous_offsets);
         for (int i = 0; i < ssao_atrous_passes; i++)
         {
+          float offsets2[5];
+          for (int j = 0; j < 5; j++)
+          {
+            offsets2[j] = ssao_atrous_offsets[j] * glm::pow(2.0f, i);
+          }
+          ssaoblur->Set1FloatArray("offsets[0]", offsets2);
           ssaoblur->SetBool("u_horizontal", false);
           glBindTextureUnit(0, ambientOcclusionTexture);
           glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTextureBlurred, 0);
@@ -462,6 +468,12 @@ void Renderer::MainLoop()
         glDrawArrays(GL_TRIANGLES, 0, 3);
         if (atrousPasses == 2) // two passes (won't support more)
         {
+          glm::vec2 atrousKernelOffsets2[25];
+          for (int i = 0; i < 25; i++)
+          {
+            atrousKernelOffsets2[i] = atrouskerneloffsets[i] * 2.0f;
+          }
+          atrousFilter->Set2FloatArray("offsets[0]", atrousKernelOffsets2);
           glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT1);
           glBindTextureUnit(0, atrousTex);
           glDrawArrays(GL_TRIANGLES, 0, 3);
