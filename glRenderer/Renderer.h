@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 
+import Material;
 import Mesh;
 import Camera;
 import RendererHelpers;
@@ -89,39 +90,6 @@ private:
     float atrous_step_width{ 1.0f };
   }ssao;
 
-  // camera
-  Camera cam;
-  float fovDeg = 80.0f;
-
-  // scene info
-  Mesh sphere;
-  Mesh sphere2;
-  std::vector<ObjectBatched> batchedObjects;
-  const int max_vertices{ 5'000'000 };
-  std::unique_ptr<DynamicBuffer> vertexBuffer;
-  std::unique_ptr<DynamicBuffer> indexBuffer;
-  std::unique_ptr<StaticBuffer> materialsBuffer; // material info
-  std::unique_ptr<StaticBuffer> drawIndirectBuffer; // DrawElementsIndirectCommand
-  MaterialManager materialManager;
-  GLuint legitFinalImage{};
-  float magnifierScale{ .025f };
-  bool magnifierLock{ false };
-  glm::vec2 magnifier_lastMouse{};
-
-  // lighting
-  std::vector<PointLight> localLights;
-  std::unique_ptr<StaticBuffer> lightSSBO;
-  float sunPosition{ 0 };
-  DirLight globalLight;
-  int numLights{ 1000 };
-  glm::vec2 lightFalloff{ 2, 8 };
-  float lightVolumeThreshold{ 0.01f };
-  bool materialOverride{ false };
-  glm::vec3 albedoOverride{ 0.129f, 0.643f, 0.921f };
-  float roughnessOverride{ 0.5f };
-  float metalnessOverride{ 1.0f };
-  float ambientOcclusionOverride{ 1.0f };
-
   struct FXAAConfig
   {
     bool enabled{ true };
@@ -131,7 +99,6 @@ private:
     float edgeBlendStrength{ 1.0f };
   }fxaa;
 
-  std::unique_ptr<Texture2D> bluenoiseTex;
   struct VolumetricConfig
   {
     bool enabled{ true };
@@ -166,16 +133,6 @@ private:
       { -2, -2 }, { -1, -2 }, { 0, -2 }, { 1, -2 }, { 2, -2 } };
   }volumetrics;
 
-  // deferred stuff
-  GLuint gfbo{};
-  GLuint gAlbedo{};
-  GLuint gNormal{};
-  GLuint gDepth{};
-  GLuint gRMA{}; // roughness, metalness, ambient occlusion
-  GLuint postprocessFbo{};
-  GLuint postprocessColor{};
-  GLuint postprocessPostSRGB{};
-
   struct SSRConfig
   {
     bool enabled{ false };
@@ -191,6 +148,51 @@ private:
     int maxRaySteps{ 30 };
     int binarySearchSteps{ 5 };
   }ssr;
+
+  // camera
+  Camera cam;
+  float fovDeg = 80.0f;
+
+  // scene info
+  Mesh sphere;
+  Mesh sphere2;
+  std::vector<ObjectBatched> batchedObjects;
+  const int max_vertices{ 5'000'000 };
+  std::unique_ptr<DynamicBuffer> vertexBuffer;
+  std::unique_ptr<DynamicBuffer> indexBuffer;
+  std::unique_ptr<StaticBuffer> materialsBuffer; // material info
+  std::unique_ptr<StaticBuffer> drawIndirectBuffer; // DrawElementsIndirectCommand
+  MaterialManager materialManager;
+  GLuint legitFinalImage{};
+  float magnifierScale{ .025f };
+  bool magnifierLock{ false };
+  glm::vec2 magnifier_lastMouse{};
+
+  // lighting
+  std::vector<PointLight> localLights;
+  std::unique_ptr<StaticBuffer> lightSSBO;
+  float sunPosition{ 0 };
+  DirLight globalLight;
+  int numLights{ 1000 };
+  glm::vec2 lightFalloff{ 2, 8 };
+  float lightVolumeThreshold{ 0.01f };
+  bool materialOverride{ false };
+  glm::vec3 albedoOverride{ 0.129f, 0.643f, 0.921f };
+  float roughnessOverride{ 0.5f };
+  float metalnessOverride{ 1.0f };
+  float ambientOcclusionOverride{ 1.0f };
+
+  std::unique_ptr<Texture2D> bluenoiseTex;
+
+  // deferred stuff
+  GLuint gfbo{};
+  GLuint gAlbedo{};
+  GLuint gNormal{};
+  GLuint gDepth{};
+  GLuint gRMA{}; // roughness, metalness, ambient occlusion
+  GLuint postprocessFbo{};
+  GLuint postprocessColor{};
+  GLuint postprocessPostSRGB{};
 
   // generic shadow stuff
   GLuint shadowFbo{};
@@ -222,17 +224,20 @@ private:
   float msmA = 3e-5f; // unused
 
   // HDR stuff
-  GLuint hdrfbo{};
-  GLuint hdrColor{};
-  GLuint hdrDepth{};
-  std::unique_ptr<StaticBuffer> histogramBuffer;
-  std::unique_ptr<StaticBuffer> exposureBuffer;
-  float targetLuminance{ .22f };
-  float minExposure{ .1f };
-  float maxExposure{ 100.0f };
-  float exposureFactor{ 1.0f };
-  float adjustmentSpeed{ 2.0f };
-  const int NUM_BUCKETS{ 128 };
+  struct HDRConfig
+  {
+    GLuint fbo{};
+    GLuint colorTex{};
+    GLuint depthTex{};
+    std::unique_ptr<StaticBuffer> histogramBuffer;
+    std::unique_ptr<StaticBuffer> exposureBuffer;
+    float targetLuminance{ .22f };
+    float minExposure{ .1f };
+    float maxExposure{ 100.0f };
+    float exposureFactor{ 1.0f };
+    float adjustmentSpeed{ 2.0f };
+    const int NUM_BUCKETS{ 128 };
+  }hdr;
 
   GLint uiViewBuffer{};
 };

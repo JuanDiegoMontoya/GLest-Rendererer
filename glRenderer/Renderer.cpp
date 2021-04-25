@@ -338,7 +338,7 @@ void Renderer::MainLoop()
       }
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, hdrfbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, hdr.fbo);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindTextureUnit(0, gNormal);
     glBindTextureUnit(1, gAlbedo);
@@ -394,7 +394,7 @@ void Renderer::MainLoop()
 
     // skybox pass
     {
-      glBlitNamedFramebuffer(gfbo, hdrfbo,
+      glBlitNamedFramebuffer(gfbo, hdr.fbo,
         0, 0, WINDOW_WIDTH, WINDOW_HEIGHT,
         0, 0, WINDOW_WIDTH, WINDOW_HEIGHT,
         GL_DEPTH_BUFFER_BIT, GL_NEAREST);
@@ -487,7 +487,7 @@ void Renderer::MainLoop()
       auto& ssrShader = Shader::shaders["ssr"];
       ssrShader->Bind();
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      glBindTextureUnit(0, hdrColor);
+      glBindTextureUnit(0, hdr.colorTex);
       glBindTextureUnit(1, gDepth);
       glBindTextureUnit(2, gRMA);
       glBindTextureUnit(3, gNormal);
@@ -513,7 +513,7 @@ void Renderer::MainLoop()
       auto& fsshader = Shader::shaders["fstexture"];
       fsshader->Bind();
       fsshader->SetInt("u_texture", 0);
-      glBindTextureUnit(0, hdrColor);
+      glBindTextureUnit(0, hdr.colorTex);
       glDrawArrays(GL_TRIANGLES, 0, 3);
       if (volumetrics.enabled)
       {
@@ -694,15 +694,15 @@ void Renderer::CreateFramebuffers()
   }
 
   // create HDR framebuffer
-  glCreateTextures(GL_TEXTURE_2D, 1, &hdrColor);
-  glTextureStorage2D(hdrColor, 1, GL_RGBA16F, WINDOW_WIDTH, WINDOW_HEIGHT);
-  glCreateTextures(GL_TEXTURE_2D, 1, &hdrDepth);
-  glTextureStorage2D(hdrDepth, 1, GL_DEPTH_COMPONENT32F, WINDOW_WIDTH, WINDOW_HEIGHT);
-  glCreateFramebuffers(1, &hdrfbo);
-  glNamedFramebufferTexture(hdrfbo, GL_COLOR_ATTACHMENT0, hdrColor, 0);
-  glNamedFramebufferTexture(hdrfbo, GL_DEPTH_ATTACHMENT, hdrDepth, 0);
-  glNamedFramebufferDrawBuffer(hdrfbo, GL_COLOR_ATTACHMENT0);
-  if (GLenum status = glCheckNamedFramebufferStatus(hdrfbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+  glCreateTextures(GL_TEXTURE_2D, 1, &hdr.colorTex);
+  glTextureStorage2D(hdr.colorTex, 1, GL_RGBA16F, WINDOW_WIDTH, WINDOW_HEIGHT);
+  glCreateTextures(GL_TEXTURE_2D, 1, &hdr.depthTex);
+  glTextureStorage2D(hdr.depthTex, 1, GL_DEPTH_COMPONENT32F, WINDOW_WIDTH, WINDOW_HEIGHT);
+  glCreateFramebuffers(1, &hdr.fbo);
+  glNamedFramebufferTexture(hdr.fbo, GL_COLOR_ATTACHMENT0, hdr.colorTex, 0);
+  glNamedFramebufferTexture(hdr.fbo, GL_DEPTH_ATTACHMENT, hdr.depthTex, 0);
+  glNamedFramebufferDrawBuffer(hdr.fbo, GL_COLOR_ATTACHMENT0);
+  if (GLenum status = glCheckNamedFramebufferStatus(hdr.fbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
   {
     throw std::runtime_error("Failed to create HDR framebuffer");
   }
@@ -757,10 +757,10 @@ void Renderer::CreateFramebuffers()
   }
 
   // create tone mapping buffers
-  std::vector<int> zeros(NUM_BUCKETS, 0);
-  float expo[] = { exposureFactor, 0 };
-  exposureBuffer = std::make_unique<StaticBuffer>(expo, 2 * sizeof(float), 0);
-  histogramBuffer = std::make_unique<StaticBuffer>(zeros.data(), zeros.size() * sizeof(int), 0);
+  std::vector<int> zeros(hdr.NUM_BUCKETS, 0);
+  float expo[] = { hdr.exposureFactor, 0 };
+  hdr.exposureBuffer = std::make_unique<StaticBuffer>(expo, 2 * sizeof(float), 0);
+  hdr.histogramBuffer = std::make_unique<StaticBuffer>(zeros.data(), zeros.size() * sizeof(int), 0);
 
   const GLfloat txzeros[] = { 0, 0, 0, 0 };
   glCreateTextures(GL_TEXTURE_2D, 1, &shadowDepth);
@@ -954,9 +954,9 @@ void Renderer::Cleanup()
   glDeleteTextures(1, &msmShadowMomentsBlur);
   glDeleteFramebuffers(1, &msmShadowFbo);
 
-  glDeleteTextures(1, &hdrColor);
-  glDeleteTextures(1, &hdrDepth);
-  glDeleteFramebuffers(1, &hdrfbo);
+  glDeleteTextures(1, &hdr.colorTex);
+  glDeleteTextures(1, &hdr.depthTex);
+  glDeleteFramebuffers(1, &hdr.fbo);
 
   glDeleteFramebuffers(1, &ssao.fbo);
   glDeleteTextures(1, &ssao.texture);
@@ -1060,8 +1060,8 @@ void Renderer::DrawUI(float dt)
     ImGui::RadioButton("gNormal", &uiViewBuffer, gNormal);
     ImGui::RadioButton("gDepth", &uiViewBuffer, gDepth);
     ImGui::RadioButton("gRMA", &uiViewBuffer, gRMA);
-    ImGui::RadioButton("hdrColor", &uiViewBuffer, hdrColor);
-    ImGui::RadioButton("hdrDepth", &uiViewBuffer, hdrDepth);
+    ImGui::RadioButton("hdr.colorTex", &uiViewBuffer, hdr.colorTex);
+    ImGui::RadioButton("hdr.depthTex", &uiViewBuffer, hdr.depthTex);
     ImGui::RadioButton("shadowDepthGoodFormat", &uiViewBuffer, vshadowDepthGoodFormat);
     ImGui::RadioButton("volumetrics.atrousTex", &uiViewBuffer, volumetrics.atrousTex);
     ImGui::RadioButton("volumetrics.tex", &uiViewBuffer, volumetrics.tex);
@@ -1220,11 +1220,11 @@ void Renderer::DrawUI(float dt)
 
   if (ImGui::TreeNode("Postprocessing"))
   {
-    ImGui::SliderFloat("Lum Target", &targetLuminance, 0.01f, 1.0f);
-    ImGui::SliderFloat("Exposure Factor", &exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Adjustment Speed", &adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Min exposure", &minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Max exposure", &maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Lum Target", &hdr.targetLuminance, 0.01f, 1.0f);
+    ImGui::SliderFloat("Exposure Factor", &hdr.exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Adjustment Speed", &hdr.adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Min exposure", &hdr.minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Max exposure", &hdr.maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
 
     ImGui::TreePop();
   }
@@ -1253,8 +1253,8 @@ void Renderer::ApplyTonemapping(float dt)
 
   glBindTextureUnit(1, postprocessColor);
 
-  const float logLowLum = glm::log(targetLuminance / maxExposure);
-  const float logMaxLum = glm::log(targetLuminance / minExposure);
+  const float logLowLum = glm::log(hdr.targetLuminance / hdr.maxExposure);
+  const float logMaxLum = glm::log(hdr.targetLuminance / hdr.minExposure);
   const int computePixelsX = WINDOW_WIDTH / 2;
   const int computePixelsY = WINDOW_HEIGHT / 2;
 
@@ -1268,25 +1268,25 @@ void Renderer::ApplyTonemapping(float dt)
     const int Y_SIZE = 8;
     int xgroups = (computePixelsX + X_SIZE - 1) / X_SIZE;
     int ygroups = (computePixelsY + Y_SIZE - 1) / Y_SIZE;
-    histogramBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
+    hdr.histogramBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
     glDispatchCompute(xgroups, ygroups, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
   }
 
   //float expo{};
-  //glGetNamedBufferSubData(exposureBuffer, 0, sizeof(float), &expo);
+  //glGetNamedBufferSubData(hdr.exposureBuffer, 0, sizeof(float), &expo);
   //printf("Exposure: %f\n", expo);
 
   {
-    exposureBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
-    histogramBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 1);
+    hdr.exposureBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
+    hdr.histogramBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 1);
     auto& cshdr = Shader::shaders["calc_exposure"];
     cshdr->Bind();
     cshdr->SetFloat("u_dt", dt);
-    cshdr->SetFloat("u_adjustmentSpeed", adjustmentSpeed);
+    cshdr->SetFloat("u_adjustmentSpeed", hdr.adjustmentSpeed);
     cshdr->SetFloat("u_logLowLum", logLowLum);
     cshdr->SetFloat("u_logMaxLum", logMaxLum);
-    cshdr->SetFloat("u_targetLuminance", targetLuminance);
+    cshdr->SetFloat("u_targetLuminance", hdr.targetLuminance);
     cshdr->SetInt("u_numPixels", computePixelsX * computePixelsY);
     glDispatchCompute(1, 1, 1);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -1298,7 +1298,7 @@ void Renderer::ApplyTonemapping(float dt)
   glDepthMask(GL_FALSE);
   glDisable(GL_DEPTH_TEST);
   shdr->Bind();
-  shdr->SetFloat("u_exposureFactor", exposureFactor);
+  shdr->SetFloat("u_exposureFactor", hdr.exposureFactor);
   shdr->SetInt("u_hdrBuffer", 1);
   glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, postprocessPostSRGB, 0);
   glDrawArrays(GL_TRIANGLES, 0, 3);

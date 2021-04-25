@@ -51,8 +51,8 @@ vec3 ComputeFXAA()
   float lumW = ColorToLum(colorW);
   float lumE = ColorToLum(colorE);
 
-  float lumMax = max(max(max(max(lumCenter, lumN), lumS), lumW), lumS);
-  float lumMin = min(min(min(min(lumCenter, lumN), lumS), lumW), lumS);
+  float lumMax = max(max(max(max(lumCenter, lumN), lumS), lumW), lumE);
+  float lumMin = min(min(min(min(lumCenter, lumN), lumS), lumW), lumE);
   float lumContrast = lumMax - lumMin;
 
   // early exit for fragments in low contrast areas
