@@ -36,7 +36,7 @@ void Renderer::InitWindow()
   //glfwWindowHint(GLFW_SAMPLES, FRAMEBUFFER_MULTISAMPLES);
   glfwSwapInterval(vsyncEnabled);
 
-  window = glfwCreateWindow(WIDTH, HEIGHT, "GLest Rendererer", nullptr, nullptr);
+  window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "GLest Rendererer", nullptr, nullptr);
   glfwMakeContextCurrent(window);
   Input::Init(window);
   Input::SetCursorVisible(cursorVisible);
@@ -97,16 +97,9 @@ void Renderer::MainLoop()
   glClearColor(0, 0, 0, 0);
 
   Timer timer;
-  float accum = 0;
   while (!glfwWindowShouldClose(window))
   {
     const float dt = static_cast<float>(timer.elapsed());
-    accum += dt;
-    if (accum > 1.0f)
-    {
-      printf("dt: %f (%f FPS)\n", dt, 1.f / dt);
-      accum = 0;
-    }
     timer.reset();
 
     Input::Update();
@@ -245,7 +238,7 @@ void Renderer::MainLoop()
       }
     }
 
-    glViewport(0, 0, WIDTH, HEIGHT);
+    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     // populate gbuffer pass
     {
@@ -290,56 +283,56 @@ void Renderer::MainLoop()
       }
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, ssaoFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, ssao.fbo);
     //glClear(GL_COLOR_BUFFER_BIT);
     float unovec[] = { 1, 1, 1, 1 };
-    glClearNamedFramebufferfv(ssaoFbo, GL_COLOR, 0, unovec);
+    glClearNamedFramebufferfv(ssao.fbo, GL_COLOR, 0, unovec);
     glBindTextureUnit(0, gDepth);
     glBindTextureUnit(1, gNormal);
 
     // SSAO pass
-    if (ssao_enabled)
+    if (ssao.enabled)
     {
-      auto& ssao = Shader::shaders["ssao"];
-      ssao->Bind();
-      ssao->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
-      ssao->SetMat4("u_view", cam.GetView());
-      ssao->SetUInt("u_numSamples", ssao_samples_near);
-      ssao->SetFloat("u_delta", ssao_delta);
-      ssao->SetFloat("u_R", ssao_range);
-      ssao->SetFloat("u_s", ssao_s);
-      ssao->SetFloat("u_k", ssao_k);
-      glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTexture, 0);
+      auto& ssaoShader = Shader::shaders["ssao"];
+      ssaoShader->Bind();
+      ssaoShader->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
+      ssaoShader->SetMat4("u_view", cam.GetView());
+      ssaoShader->SetUInt("u_numSamples", ssao.samples_near);
+      ssaoShader->SetFloat("u_delta", ssao.delta);
+      ssaoShader->SetFloat("u_R", ssao.range);
+      ssaoShader->SetFloat("u_s", ssao.s);
+      ssaoShader->SetFloat("u_k", ssao.k);
+      glNamedFramebufferTexture(ssao.fbo, GL_COLOR_ATTACHMENT0, ssao.texture, 0);
       glDrawArrays(GL_TRIANGLES, 0, 3);
 
-      if (ssao_atrous_passes > 0)
+      if (ssao.atrous_passes > 0)
       {
         glBindTextureUnit(1, gDepth);
         glBindTextureUnit(2, gNormal);
         auto& ssaoblur = Shader::shaders["atrous_ssao"];
         ssaoblur->Bind();
-        ssaoblur->SetFloat("n_phi", ssao_atrous_n_phi);
-        ssaoblur->SetFloat("p_phi", ssao_atrous_p_phi);
-        ssaoblur->SetFloat("stepwidth", ssao_atrous_step_width);
+        ssaoblur->SetFloat("n_phi", ssao.atrous_n_phi);
+        ssaoblur->SetFloat("p_phi", ssao.atrous_p_phi);
+        ssaoblur->SetFloat("stepwidth", ssao.atrous_step_width);
         ssaoblur->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
-        ssaoblur->SetIVec2("u_resolution", WIDTH, HEIGHT);
-        ssaoblur->Set1FloatArray("kernel[0]", ssao_atrous_kernel);
-        ssaoblur->Set1FloatArray("offsets[0]", ssao_atrous_offsets);
-        for (int i = 0; i < ssao_atrous_passes; i++)
+        ssaoblur->SetIVec2("u_resolution", WINDOW_WIDTH, WINDOW_HEIGHT);
+        ssaoblur->Set1FloatArray("kernel[0]", ssao.atrous_kernel);
+        ssaoblur->Set1FloatArray("offsets[0]", ssao.atrous_offsets);
+        for (int i = 0; i < ssao.atrous_passes; i++)
         {
           float offsets2[5];
           for (int j = 0; j < 5; j++)
           {
-            offsets2[j] = ssao_atrous_offsets[j] * glm::pow(2.0f, i);
+            offsets2[j] = ssao.atrous_offsets[j] * glm::pow(2.0f, i);
           }
           ssaoblur->Set1FloatArray("offsets[0]", offsets2);
           ssaoblur->SetBool("u_horizontal", false);
-          glBindTextureUnit(0, ambientOcclusionTexture);
-          glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTextureBlurred, 0);
+          glBindTextureUnit(0, ssao.texture);
+          glNamedFramebufferTexture(ssao.fbo, GL_COLOR_ATTACHMENT0, ssao.textureBlurred, 0);
           glDrawArrays(GL_TRIANGLES, 0, 3);
           ssaoblur->SetBool("u_horizontal", true);
-          glBindTextureUnit(0, ambientOcclusionTextureBlurred);
-          glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTexture, 0);
+          glBindTextureUnit(0, ssao.textureBlurred);
+          glNamedFramebufferTexture(ssao.fbo, GL_COLOR_ATTACHMENT0, ssao.texture, 0);
           glDrawArrays(GL_TRIANGLES, 0, 3);
         }
       }
@@ -351,7 +344,7 @@ void Renderer::MainLoop()
     glBindTextureUnit(1, gAlbedo);
     glBindTextureUnit(2, gRMA);
     glBindTextureUnit(3, gDepth);
-    glBindTextureUnit(4, ambientOcclusionTexture);
+    glBindTextureUnit(4, ssao.texture);
     glBindTextureUnit(5, filteredTex);
     glBindTextureUnit(6, irradianceMap);
     glBindTextureUnit(7, envMap_hdri->GetID());
@@ -364,7 +357,7 @@ void Renderer::MainLoop()
       gPhongGlobal->SetInt("u_shadowMethod", shadow_method);
       gPhongGlobal->SetFloat("u_C", eConstant);
       gPhongGlobal->SetVec3("u_viewPos", cam.GetPos());
-      gPhongGlobal->SetIVec2("u_screenSize", WIDTH, HEIGHT);
+      gPhongGlobal->SetIVec2("u_screenSize", WINDOW_WIDTH, WINDOW_HEIGHT);
       gPhongGlobal->SetUInt("u_samples", numEnvSamples);
       gPhongGlobal->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
       //gPhongGlobal->SetVec3("u_globalLight_ambient", globalLight.ambient);
@@ -402,8 +395,8 @@ void Renderer::MainLoop()
     // skybox pass
     {
       glBlitNamedFramebuffer(gfbo, hdrfbo,
-        0, 0, WIDTH, HEIGHT,
-        0, 0, WIDTH, HEIGHT,
+        0, 0, WINDOW_WIDTH, WINDOW_HEIGHT,
+        0, 0, WINDOW_WIDTH, WINDOW_HEIGHT,
         GL_DEPTH_BUFFER_BIT, GL_NEAREST);
       glEnable(GL_DEPTH_TEST);
       glDepthMask(GL_FALSE);
@@ -413,7 +406,7 @@ void Renderer::MainLoop()
       auto& hdriShader = Shader::shaders["hdri_skybox"];
       hdriShader->Bind();
       hdriShader->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
-      hdriShader->SetIVec2("u_screenSize", WIDTH, HEIGHT);
+      hdriShader->SetIVec2("u_screenSize", WINDOW_WIDTH, WINDOW_HEIGHT);
       hdriShader->SetVec3("u_camPos", cam.GetPos());
       envMap_hdri->Bind(0);
       //envMap_irradiance->Bind(0);
@@ -421,10 +414,10 @@ void Renderer::MainLoop()
     }
 
     // volumetric/crepuscular/god rays pass (write to volumetrics texture)
-    if (volumetric_enabled)
+    if (volumetrics.enabled)
     {
-      glViewport(0, 0, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
-      glBindFramebuffer(GL_FRAMEBUFFER, volumetricsFbo);
+      glViewport(0, 0, volumetrics.framebuffer_width, volumetrics.framebuffer_height);
+      glBindFramebuffer(GL_FRAMEBUFFER, volumetrics.fbo);
       glClear(GL_COLOR_BUFFER_BIT);
       glDisable(GL_BLEND);
       glDisable(GL_DEPTH_TEST);
@@ -437,45 +430,45 @@ void Renderer::MainLoop()
       volumetric->Bind();
       volumetric->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
       volumetric->SetMat4("u_lightMatrix", lightMat);
-      volumetric->SetIVec2("u_screenSize", VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
-      volumetric->SetInt("NUM_STEPS", volumetric_steps);
-      volumetric->SetFloat("intensity", volumetric_intensity);
-      volumetric->SetFloat("distToFull", volumetric_distToFull);
-      volumetric->SetFloat("noiseOffset", volumetric_noiseOffset);
+      volumetric->SetIVec2("u_screenSize", volumetrics.framebuffer_width, volumetrics.framebuffer_height);
+      volumetric->SetInt("NUM_STEPS", volumetrics.steps);
+      volumetric->SetFloat("intensity", volumetrics.intensity);
+      volumetric->SetFloat("distToFull", volumetrics.distToFull);
+      volumetric->SetFloat("noiseOffset", volumetrics.noiseOffset);
       glDrawArrays(GL_TRIANGLES, 0, 3);
 
-      if (atrousPasses > 0)
+      if (volumetrics.atrous_passes > 0)
       {
-        //blurTexture16rf(volumetricsTex, volumetricsTexBlur, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT, VOLUMETRIC_BLUR_PASSES, VOLUMETRIC_BLUR_STRENGTH);
-        glViewport(0, 0, WIDTH, HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, atrousFbo);
+        //blurTexture16rf(volumetrics.tex, volumetrics.texBlur, volumetrics.framebuffer_width, volumetrics.framebuffer_height, VOLUMETRIC_BLUR_PASSES, VOLUMETRIC_BLUR_STRENGTH);
+        glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, volumetrics.atrousFbo);
         auto& atrousFilter = Shader::shaders["atrous_volumetric"];
         atrousFilter->Bind();
         atrousFilter->SetInt("gColor", 0);
         //atrousFilter->SetInt("gDepth", 1);
         //atrousFilter->SetInt("gNormal", 2);
-        atrousFilter->SetFloat("c_phi", c_phi);
+        atrousFilter->SetFloat("c_phi", volumetrics.c_phi);
         //atrousFilter->SetFloat("n_phi", n_phi);
         //atrousFilter->SetFloat("p_phi", p_phi);
-        atrousFilter->SetFloat("stepwidth", stepWidth);
+        atrousFilter->SetFloat("stepwidth", volumetrics.stepWidth);
         //atrousFilter->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
-        atrousFilter->SetIVec2("u_resolution", VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
-        atrousFilter->Set1FloatArray("kernel[0]", atrouskernel);
-        atrousFilter->Set2FloatArray("offsets[0]", atrouskerneloffsets);
+        atrousFilter->SetIVec2("u_resolution", volumetrics.framebuffer_width, volumetrics.framebuffer_height);
+        atrousFilter->Set1FloatArray("kernel[0]", volumetrics.atrouskernel);
+        atrousFilter->Set2FloatArray("offsets[0]", volumetrics.atrouskerneloffsets);
 
-        glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT0);
-        glBindTextureUnit(0, volumetricsTex);
+        glNamedFramebufferDrawBuffer(volumetrics.atrousFbo, GL_COLOR_ATTACHMENT0);
+        glBindTextureUnit(0, volumetrics.tex);
         glDrawArrays(GL_TRIANGLES, 0, 3);
-        if (atrousPasses == 2) // two passes (won't support more)
+        if (volumetrics.atrous_passes == 2) // two passes (won't support more)
         {
           glm::vec2 atrousKernelOffsets2[25];
           for (int i = 0; i < 25; i++)
           {
-            atrousKernelOffsets2[i] = atrouskerneloffsets[i] * 2.0f;
+            atrousKernelOffsets2[i] = volumetrics.atrouskerneloffsets[i] * 2.0f;
           }
           atrousFilter->Set2FloatArray("offsets[0]", atrousKernelOffsets2);
-          glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT1);
-          glBindTextureUnit(0, atrousTex);
+          glNamedFramebufferDrawBuffer(volumetrics.atrousFbo, GL_COLOR_ATTACHMENT1);
+          glBindTextureUnit(0, volumetrics.atrousTex);
           glDrawArrays(GL_TRIANGLES, 0, 3);
         }
       }
@@ -486,10 +479,10 @@ void Renderer::MainLoop()
     glDepthMask(GL_FALSE);
 
     // screen-space reflections
-    if (ssr_enabled)
+    if (ssr.enabled)
     {
-      glViewport(0, 0, SSR_WIDTH, SSR_HEIGHT);
-      glBindFramebuffer(GL_FRAMEBUFFER, ssrFbo);
+      glViewport(0, 0, ssr.framebuffer_width, ssr.framebuffer_height);
+      glBindFramebuffer(GL_FRAMEBUFFER, ssr.fbo);
       glClear(GL_COLOR_BUFFER_BIT);
       auto& ssrShader = Shader::shaders["ssr"];
       ssrShader->Bind();
@@ -501,19 +494,19 @@ void Renderer::MainLoop()
       ssrShader->SetMat4("u_proj", cam.GetProj());
       ssrShader->SetMat4("u_view", cam.GetView());
       ssrShader->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
-      ssrShader->SetFloat("rayStep", ssr_rayStep);
-      ssrShader->SetFloat("minRayStep", ssr_minRayStep);
-      ssrShader->SetFloat("thickness", ssr_thickness);
-      ssrShader->SetFloat("searchDist", ssr_searchDist);
-      ssrShader->SetInt("maxSteps", ssr_maxRaySteps);
-      ssrShader->SetInt("binarySearchSteps", ssr_binarySearchSteps);
-      ssrShader->SetIVec2("u_viewportSize", SSR_WIDTH, SSR_HEIGHT);
+      ssrShader->SetFloat("rayStep", ssr.rayStep);
+      ssrShader->SetFloat("minRayStep", ssr.minRayStep);
+      ssrShader->SetFloat("thickness", ssr.thickness);
+      ssrShader->SetFloat("searchDist", ssr.searchDist);
+      ssrShader->SetInt("maxSteps", ssr.maxRaySteps);
+      ssrShader->SetInt("binarySearchSteps", ssr.binarySearchSteps);
+      ssrShader->SetIVec2("u_viewportSize", ssr.framebuffer_width, ssr.framebuffer_height);
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
     // composite blurred volumetrics and SSR with unprocessed image
     {
-      glViewport(0, 0, WIDTH, HEIGHT);
+      glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
       glBindFramebuffer(GL_FRAMEBUFFER, postprocessFbo);
       glClear(GL_COLOR_BUFFER_BIT);
       glBlendFunc(GL_ONE, GL_ONE);
@@ -522,17 +515,17 @@ void Renderer::MainLoop()
       fsshader->SetInt("u_texture", 0);
       glBindTextureUnit(0, hdrColor);
       glDrawArrays(GL_TRIANGLES, 0, 3);
-      if (volumetric_enabled)
+      if (volumetrics.enabled)
       {
-        if (atrousPasses % 2 == 0)
-          glBindTextureUnit(0, volumetricsTex); // 0 or 2 pass a-trous
+        if (volumetrics.atrous_passes % 2 == 0)
+          glBindTextureUnit(0, volumetrics.tex); // 0 or 2 pass a-trous
         else
-          glBindTextureUnit(0, atrousTex); // 1 pass a-trous
+          glBindTextureUnit(0, volumetrics.atrousTex); // 1 pass a-trous
         glDrawArrays(GL_TRIANGLES, 0, 3);
       }
-      if (ssr_enabled)
+      if (ssr.enabled)
       {
-        glBindTextureUnit(0, ssrTex);
+        glBindTextureUnit(0, ssr.tex);
         glDrawArrays(GL_TRIANGLES, 0, 3);
       }
     }
@@ -542,16 +535,16 @@ void Renderer::MainLoop()
 
     glBindFramebuffer(GL_FRAMEBUFFER, postprocessFbo);
     glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, legitFinalImage, 0);
-    if (fxaa_enabled)
+    if (fxaa.enabled)
     {
       glBindTextureUnit(0, postprocessPostSRGB);
       auto& fxaaShader = Shader::shaders["fxaa"];
       fxaaShader->Bind();
-      fxaaShader->SetVec2("u_invScreenSize", 1.0f / WIDTH, 1.0f / HEIGHT);
-      fxaaShader->SetFloat("u_contrastThreshold", fxaa_contrastThreshold);
-      fxaaShader->SetFloat("u_relativeThreshold", fxaa_relativeThreshold);
-      fxaaShader->SetFloat("u_pixelBlendStrength", fxaa_pixelBlendStrength);
-      fxaaShader->SetFloat("u_edgeBlendStrength", fxaa_edgeBlendStrength);
+      fxaaShader->SetVec2("u_invScreenSize", 1.0f / WINDOW_WIDTH, 1.0f / WINDOW_HEIGHT);
+      fxaaShader->SetFloat("u_contrastThreshold", fxaa.contrastThreshold);
+      fxaaShader->SetFloat("u_relativeThreshold", fxaa.relativeThreshold);
+      fxaaShader->SetFloat("u_pixelBlendStrength", fxaa.pixelBlendStrength);
+      fxaaShader->SetFloat("u_edgeBlendStrength", fxaa.edgeBlendStrength);
       glDrawArrays(GL_TRIANGLES, 0, 3);
     }
     else
@@ -586,15 +579,15 @@ void Renderer::MainLoop()
     }
     if (Input::IsKeyDown(GLFW_KEY_6))
     {
-      drawFSTexture(volumetricsTex);
+      drawFSTexture(volumetrics.tex);
     }
     if (Input::IsKeyDown(GLFW_KEY_7))
     {
-      drawFSTexture(atrousTex);
+      drawFSTexture(volumetrics.atrousTex);
     }
     if (Input::IsKeyDown(GLFW_KEY_8))
     {
-      drawFSTexture(ssrTex);
+      drawFSTexture(ssr.tex);
     }
     if (Input::IsKeyDown(GLFW_KEY_9))
     {
@@ -614,11 +607,11 @@ void Renderer::MainLoop()
     }
     if (Input::IsKeyDown(GLFW_KEY_I))
     {
-      drawFSTexture(ambientOcclusionTexture);
+      drawFSTexture(ssao.texture);
     }
     if (Input::IsKeyDown(GLFW_KEY_U))
     {
-      drawFSTexture(ambientOcclusionTextureBlurred);
+      drawFSTexture(ssao.textureBlurred);
     }
     if (Input::IsKeyPressed(GLFW_KEY_C))
     {
@@ -674,7 +667,7 @@ void Renderer::MainLoop()
 
     if (cursorVisible)
     {
-      DrawUI();
+      DrawUI(dt);
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
@@ -687,24 +680,24 @@ void Renderer::CreateFramebuffers()
 {
   GLint swizzleMask[] = { GL_RED, GL_RED, GL_RED, GL_ONE };
   // create SSAO framebuffer
-  glCreateTextures(GL_TEXTURE_2D, 1, &ambientOcclusionTexture);
-  glTextureStorage2D(ambientOcclusionTexture, 1, GL_R8, WIDTH, HEIGHT);
-  glTextureParameteriv(ambientOcclusionTexture, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
-  glCreateTextures(GL_TEXTURE_2D, 1, &ambientOcclusionTextureBlurred);
-  glTextureStorage2D(ambientOcclusionTextureBlurred, 1, GL_R8, WIDTH, HEIGHT);
-  glCreateFramebuffers(1, &ssaoFbo);
-  glNamedFramebufferTexture(ssaoFbo, GL_COLOR_ATTACHMENT0, ambientOcclusionTexture, 0);
-  glNamedFramebufferDrawBuffer(ssaoFbo, GL_COLOR_ATTACHMENT0);
-  if (GLenum status = glCheckNamedFramebufferStatus(ssaoFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+  glCreateTextures(GL_TEXTURE_2D, 1, &ssao.texture);
+  glTextureStorage2D(ssao.texture, 1, GL_R8, WINDOW_WIDTH, WINDOW_HEIGHT);
+  glTextureParameteriv(ssao.texture, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+  glCreateTextures(GL_TEXTURE_2D, 1, &ssao.textureBlurred);
+  glTextureStorage2D(ssao.textureBlurred, 1, GL_R8, WINDOW_WIDTH, WINDOW_HEIGHT);
+  glCreateFramebuffers(1, &ssao.fbo);
+  glNamedFramebufferTexture(ssao.fbo, GL_COLOR_ATTACHMENT0, ssao.texture, 0);
+  glNamedFramebufferDrawBuffer(ssao.fbo, GL_COLOR_ATTACHMENT0);
+  if (GLenum status = glCheckNamedFramebufferStatus(ssao.fbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
   {
     throw std::runtime_error("Failed to create SSAO framebuffer");
   }
 
   // create HDR framebuffer
   glCreateTextures(GL_TEXTURE_2D, 1, &hdrColor);
-  glTextureStorage2D(hdrColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
+  glTextureStorage2D(hdrColor, 1, GL_RGBA16F, WINDOW_WIDTH, WINDOW_HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &hdrDepth);
-  glTextureStorage2D(hdrDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
+  glTextureStorage2D(hdrDepth, 1, GL_DEPTH_COMPONENT32F, WINDOW_WIDTH, WINDOW_HEIGHT);
   glCreateFramebuffers(1, &hdrfbo);
   glNamedFramebufferTexture(hdrfbo, GL_COLOR_ATTACHMENT0, hdrColor, 0);
   glNamedFramebufferTexture(hdrfbo, GL_DEPTH_ATTACHMENT, hdrDepth, 0);
@@ -715,50 +708,50 @@ void Renderer::CreateFramebuffers()
   }
 
   // create SSR framebuffer + textures
-  glCreateTextures(GL_TEXTURE_2D, 1, &ssrTex);
-  glTextureStorage2D(ssrTex, 1, GL_RGBA16F, SSR_WIDTH, SSR_HEIGHT);
-  glTextureParameteri(ssrTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTextureParameteri(ssrTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glCreateTextures(GL_TEXTURE_2D, 1, &ssrTexBlur);
-  glTextureStorage2D(ssrTexBlur, 1, GL_RGBA16F, SSR_WIDTH, SSR_HEIGHT);
-  glCreateFramebuffers(1, &ssrFbo);
-  glNamedFramebufferTexture(ssrFbo, GL_COLOR_ATTACHMENT0, ssrTex, 0);
-  glNamedFramebufferDrawBuffer(ssrFbo, GL_COLOR_ATTACHMENT0);
-  if (GLenum status = glCheckNamedFramebufferStatus(ssrFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+  glCreateTextures(GL_TEXTURE_2D, 1, &ssr.tex);
+  glTextureStorage2D(ssr.tex, 1, GL_RGBA16F, ssr.framebuffer_width, ssr.framebuffer_height);
+  glTextureParameteri(ssr.tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTextureParameteri(ssr.tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glCreateTextures(GL_TEXTURE_2D, 1, &ssr.texBlur);
+  glTextureStorage2D(ssr.texBlur, 1, GL_RGBA16F, ssr.framebuffer_width, ssr.framebuffer_height);
+  glCreateFramebuffers(1, &ssr.fbo);
+  glNamedFramebufferTexture(ssr.fbo, GL_COLOR_ATTACHMENT0, ssr.tex, 0);
+  glNamedFramebufferDrawBuffer(ssr.fbo, GL_COLOR_ATTACHMENT0);
+  if (GLenum status = glCheckNamedFramebufferStatus(ssr.fbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
   {
     throw std::runtime_error("Failed to create SSR framebuffer");
   }
 
   // create volumetrics texture + fbo + intermediate (for blurring)
-  glCreateTextures(GL_TEXTURE_2D, 1, &volumetricsTex);
-  glTextureStorage2D(volumetricsTex, 1, GL_R16F, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
-  glTextureParameteriv(volumetricsTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
-  glTextureParameteri(volumetricsTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTextureParameteri(volumetricsTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTextureParameteri(volumetricsTex, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-  glTextureParameteri(volumetricsTex, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-  glCreateFramebuffers(1, &volumetricsFbo);
-  glNamedFramebufferTexture(volumetricsFbo, GL_COLOR_ATTACHMENT0, volumetricsTex, 0);
-  glNamedFramebufferDrawBuffer(volumetricsFbo, GL_COLOR_ATTACHMENT0);
-  if (GLenum status = glCheckNamedFramebufferStatus(volumetricsFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+  glCreateTextures(GL_TEXTURE_2D, 1, &volumetrics.tex);
+  glTextureStorage2D(volumetrics.tex, 1, GL_R16F, volumetrics.framebuffer_width, volumetrics.framebuffer_height);
+  glTextureParameteriv(volumetrics.tex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+  glTextureParameteri(volumetrics.tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTextureParameteri(volumetrics.tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTextureParameteri(volumetrics.tex, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+  glTextureParameteri(volumetrics.tex, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+  glCreateFramebuffers(1, &volumetrics.fbo);
+  glNamedFramebufferTexture(volumetrics.fbo, GL_COLOR_ATTACHMENT0, volumetrics.tex, 0);
+  glNamedFramebufferDrawBuffer(volumetrics.fbo, GL_COLOR_ATTACHMENT0);
+  if (GLenum status = glCheckNamedFramebufferStatus(volumetrics.fbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
   {
     throw std::runtime_error("Failed to create volumetrics framebuffer");
   }
-  glCreateTextures(GL_TEXTURE_2D, 1, &volumetricsTexBlur);
-  glTextureStorage2D(volumetricsTexBlur, 1, GL_R16F, VOLUMETRIC_WIDTH, VOLUMETRIC_HEIGHT);
-  glTextureParameteriv(volumetricsTexBlur, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+  glCreateTextures(GL_TEXTURE_2D, 1, &volumetrics.texBlur);
+  glTextureStorage2D(volumetrics.texBlur, 1, GL_R16F, volumetrics.framebuffer_width, volumetrics.framebuffer_height);
+  glTextureParameteriv(volumetrics.texBlur, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
 
   // create a-trous fbo and texture
-  glCreateTextures(GL_TEXTURE_2D, 1, &atrousTex);
-  glTextureStorage2D(atrousTex, 1, GL_R16F, WIDTH, HEIGHT);
-  glTextureParameteriv(atrousTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
-  glTextureParameteri(atrousTex, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-  glTextureParameteri(atrousTex, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-  glCreateFramebuffers(1, &atrousFbo);
-  glNamedFramebufferTexture(atrousFbo, GL_COLOR_ATTACHMENT0, atrousTex, 0);
-  glNamedFramebufferTexture(atrousFbo, GL_COLOR_ATTACHMENT1, volumetricsTex, 0);
-  glNamedFramebufferDrawBuffer(atrousFbo, GL_COLOR_ATTACHMENT0);
-  if (GLenum status = glCheckNamedFramebufferStatus(atrousFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
+  glCreateTextures(GL_TEXTURE_2D, 1, &volumetrics.atrousTex);
+  glTextureStorage2D(volumetrics.atrousTex, 1, GL_R16F, WINDOW_WIDTH, WINDOW_HEIGHT);
+  glTextureParameteriv(volumetrics.atrousTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+  glTextureParameteri(volumetrics.atrousTex, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+  glTextureParameteri(volumetrics.atrousTex, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+  glCreateFramebuffers(1, &volumetrics.atrousFbo);
+  glNamedFramebufferTexture(volumetrics.atrousFbo, GL_COLOR_ATTACHMENT0, volumetrics.atrousTex, 0);
+  glNamedFramebufferTexture(volumetrics.atrousFbo, GL_COLOR_ATTACHMENT1, volumetrics.tex, 0);
+  glNamedFramebufferDrawBuffer(volumetrics.atrousFbo, GL_COLOR_ATTACHMENT0);
+  if (GLenum status = glCheckNamedFramebufferStatus(volumetrics.atrousFbo, GL_FRAMEBUFFER); status != GL_FRAMEBUFFER_COMPLETE)
   {
     throw std::runtime_error("Failed to create a-trous framebuffer");
   }
@@ -842,14 +835,14 @@ void Renderer::CreateFramebuffers()
 
   // create texture attachments for gBuffer FBO
   glCreateTextures(GL_TEXTURE_2D, 1, &gAlbedo);
-  glTextureStorage2D(gAlbedo, 1, GL_RGBA8, WIDTH, HEIGHT);
+  glTextureStorage2D(gAlbedo, 1, GL_RGBA8, WINDOW_WIDTH, WINDOW_HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &gNormal);
-  glTextureStorage2D(gNormal, 1, GL_RG8_SNORM, WIDTH, HEIGHT);
-  //glTextureStorage2D(gNormal, 1, GL_RGBA8_SNORM, WIDTH, HEIGHT); // debugging format
+  glTextureStorage2D(gNormal, 1, GL_RG8_SNORM, WINDOW_WIDTH, WINDOW_HEIGHT);
+  //glTextureStorage2D(gNormal, 1, GL_RGBA8_SNORM, WINDOW_WIDTH, WINDOW_HEIGHT); // debugging format
   glCreateTextures(GL_TEXTURE_2D, 1, &gRMA);
-  glTextureStorage2D(gRMA, 1, GL_RGB10_A2, WIDTH, HEIGHT);
+  glTextureStorage2D(gRMA, 1, GL_RGB10_A2, WINDOW_WIDTH, WINDOW_HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &gDepth);
-  glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT);
+  glTextureStorage2D(gDepth, 1, GL_DEPTH_COMPONENT32F, WINDOW_WIDTH, WINDOW_HEIGHT);
 
   // create gBuffer FBO
   glCreateFramebuffers(1, &gfbo);
@@ -868,13 +861,13 @@ void Renderer::CreateFramebuffers()
 
   // create postprocess (HDR) framebuffer
   glCreateTextures(GL_TEXTURE_2D, 1, &postprocessColor);
-  glTextureStorage2D(postprocessColor, 1, GL_RGBA16F, WIDTH, HEIGHT);
+  glTextureStorage2D(postprocessColor, 1, GL_RGBA16F, WINDOW_WIDTH, WINDOW_HEIGHT);
   glCreateTextures(GL_TEXTURE_2D, 1, &postprocessPostSRGB);
-  glTextureStorage2D(postprocessPostSRGB, 1, GL_RGBA8, WIDTH, HEIGHT);
+  glTextureStorage2D(postprocessPostSRGB, 1, GL_RGBA8, WINDOW_WIDTH, WINDOW_HEIGHT);
   glTextureParameteri(postprocessPostSRGB, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTextureParameteri(postprocessPostSRGB, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glCreateTextures(GL_TEXTURE_2D, 1, &legitFinalImage);
-  glTextureStorage2D(legitFinalImage, 1, GL_RGBA8, WIDTH, HEIGHT);
+  glTextureStorage2D(legitFinalImage, 1, GL_RGBA8, WINDOW_WIDTH, WINDOW_HEIGHT);
   glTextureParameteri(legitFinalImage, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTextureParameteri(legitFinalImage, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glCreateFramebuffers(1, &postprocessFbo);
@@ -926,12 +919,12 @@ void Renderer::Cleanup()
   glDeleteVertexArrays(1, &vao);
 
   // do not gaze at it too closely
-  glDeleteTextures(1, &volumetricsTex);
-  glDeleteTextures(1, &volumetricsTexBlur);
-  glDeleteFramebuffers(1, &volumetricsFbo);
+  glDeleteTextures(1, &volumetrics.tex);
+  glDeleteTextures(1, &volumetrics.texBlur);
+  glDeleteFramebuffers(1, &volumetrics.fbo);
 
-  glDeleteTextures(1, &atrousTex);
-  glDeleteFramebuffers(1, &atrousFbo);
+  glDeleteTextures(1, &volumetrics.atrousTex);
+  glDeleteFramebuffers(1, &volumetrics.atrousFbo);
 
   glDeleteTextures(1, &gAlbedo);
   glDeleteTextures(1, &gNormal);
@@ -942,9 +935,9 @@ void Renderer::Cleanup()
   glDeleteTextures(1, &postprocessColor);
   glDeleteFramebuffers(1, &postprocessFbo);
 
-  glDeleteTextures(1, &ssrTex);
-  glDeleteTextures(1, &ssrTexBlur);
-  glDeleteFramebuffers(1, &ssrFbo);
+  glDeleteTextures(1, &ssr.tex);
+  glDeleteTextures(1, &ssr.texBlur);
+  glDeleteFramebuffers(1, &ssr.fbo);
 
   glDeleteTextures(1, &shadowDepth);
   glDeleteFramebuffers(1, &shadowFbo);
@@ -965,9 +958,9 @@ void Renderer::Cleanup()
   glDeleteTextures(1, &hdrDepth);
   glDeleteFramebuffers(1, &hdrfbo);
 
-  glDeleteFramebuffers(1, &ssaoFbo);
-  glDeleteTextures(1, &ambientOcclusionTexture);
-  glDeleteTextures(1, &ambientOcclusionTextureBlurred);
+  glDeleteFramebuffers(1, &ssao.fbo);
+  glDeleteTextures(1, &ssao.texture);
+  glDeleteTextures(1, &ssao.textureBlurred);
 
   glDeleteTextures(1, &irradianceMap);
 
@@ -975,10 +968,18 @@ void Renderer::Cleanup()
   glfwTerminate();
 }
 
-void Renderer::DrawUI()
+void Renderer::DrawUI(float dt)
 {
   ImGui::Begin("Scene");
 
+  static double frameTimeExp = 0;
+  static double alpha = .01;
+
+  frameTimeExp = alpha * dt + (1.0 - alpha) * frameTimeExp;
+  alpha = glm::clamp((float)dt, 0.0f, 1.0f);
+
+  ImGui::Text("FPS: %.0f (%.2f ms)", 1.f / frameTimeExp, frameTimeExp * 1000);
+  ImGui::SameLine();
   if (ImGui::Checkbox("vsync", &vsyncEnabled))
   {
     glfwSwapInterval(vsyncEnabled);
@@ -1062,10 +1063,10 @@ void Renderer::DrawUI()
     ImGui::RadioButton("hdrColor", &uiViewBuffer, hdrColor);
     ImGui::RadioButton("hdrDepth", &uiViewBuffer, hdrDepth);
     ImGui::RadioButton("shadowDepthGoodFormat", &uiViewBuffer, vshadowDepthGoodFormat);
-    ImGui::RadioButton("atrousTex", &uiViewBuffer, atrousTex);
-    ImGui::RadioButton("volumetricsTex", &uiViewBuffer, volumetricsTex);
+    ImGui::RadioButton("volumetrics.atrousTex", &uiViewBuffer, volumetrics.atrousTex);
+    ImGui::RadioButton("volumetrics.tex", &uiViewBuffer, volumetrics.tex);
     ImGui::RadioButton("postprocessColor", &uiViewBuffer, postprocessColor);
-    ImGui::RadioButton("ssrTex", &uiViewBuffer, ssrTex);
+    ImGui::RadioButton("ssr.tex", &uiViewBuffer, ssr.tex);
 
     ImGui::TreePop();
   }
@@ -1117,70 +1118,70 @@ void Renderer::DrawUI()
 
   ImGui::Begin("Features");
 
-  ImGui::Checkbox("##volumetric", &volumetric_enabled);
+  ImGui::Checkbox("##volumetric", &volumetrics.enabled);
   ImGui::SameLine();
   if (ImGui::TreeNode("Volumetric Fog"))
   {
     ImGui::Text("Rays");
     ImGui::Separator();
-    ImGui::SliderInt("Steps", &volumetric_steps, 1, 100);
-    ImGui::SliderFloat("Intensity", &volumetric_intensity, 0.0f, 1.0f, "%.3f", 3.0f);
-    ImGui::SliderFloat("Offset", &volumetric_noiseOffset, 0.0f, 1.0f);
+    ImGui::SliderInt("Steps", &volumetrics.steps, 1, 100);
+    ImGui::SliderFloat("Intensity", &volumetrics.intensity, 0.0f, 1.0f, "%.3f", 3.0f);
+    ImGui::SliderFloat("Offset", &volumetrics.noiseOffset, 0.0f, 1.0f);
 
     ImGui::Text((const char*)(u8"À-Trous"));
     ImGui::Separator();
     ImGui::Text("Passes");
-    int passes = atrousPasses;
+    int passes = volumetrics.atrous_passes;
     ImGui::RadioButton("Zero", &passes, 0);
     ImGui::SameLine(); ImGui::RadioButton("One", &passes, 1);
     ImGui::SameLine(); ImGui::RadioButton("Two", &passes, 2);
-    atrousPasses = passes;
-    ImGui::SliderFloat("c_phi", &c_phi, .0001f, 10.0f, "%.4f", 4.0f);
-    ImGui::SliderFloat("Step width", &stepWidth, 0.5f, 2.0f, "%.3f");
+    volumetrics.atrous_passes = passes;
+    ImGui::SliderFloat("volumetrics.c_phi", &volumetrics.c_phi, .0001f, 10.0f, "%.4f", 4.0f);
+    ImGui::SliderFloat("Step WINDOW_WIDTH", &volumetrics.stepWidth, 0.5f, 2.0f, "%.3f");
 
     ImGui::TreePop();
   }
 
-  ImGui::Checkbox("##ssr", &ssr_enabled);
+  ImGui::Checkbox("##ssr", &ssr.enabled);
   ImGui::SameLine();
   if (ImGui::TreeNode("Screen-Space Reflections"))
   {
-    ImGui::SliderFloat("Step size", &ssr_rayStep, 0.01f, 1.0f);
-    ImGui::SliderFloat("Min step", &ssr_minRayStep, 0.01f, 1.0f);
-    ImGui::SliderFloat("Thickness", &ssr_thickness, 0.00f, 1.0f);
-    ImGui::SliderFloat("Search distance", &ssr_searchDist, 1.0f, 50.0f);
-    ImGui::SliderInt("Max steps", &ssr_maxRaySteps, 0, 100);
-    ImGui::SliderInt("Binary search steps", &ssr_binarySearchSteps, 0, 10);
+    ImGui::SliderFloat("Step size", &ssr.rayStep, 0.01f, 1.0f);
+    ImGui::SliderFloat("Min step", &ssr.minRayStep, 0.01f, 1.0f);
+    ImGui::SliderFloat("Thickness", &ssr.thickness, 0.00f, 1.0f);
+    ImGui::SliderFloat("Search distance", &ssr.searchDist, 1.0f, 50.0f);
+    ImGui::SliderInt("Max steps", &ssr.maxRaySteps, 0, 100);
+    ImGui::SliderInt("Binary search steps", &ssr.binarySearchSteps, 0, 10);
 
     ImGui::TreePop();
   }
 
-  ImGui::Checkbox("##ssao", &ssao_enabled);
+  ImGui::Checkbox("##ssao", &ssao.enabled);
   ImGui::SameLine();
   if (ImGui::TreeNode("SSAO"))
   {
-    ImGui::SliderInt("Samples", &ssao_samples_near, 0, 30);
-    ImGui::SliderFloat("Delta", &ssao_delta, 0.0001f, 0.01f, "%.4f", 2.0f);
-    ImGui::SliderFloat("Range", &ssao_range, 0.1f, 3.0f);
-    ImGui::SliderFloat("s", &ssao_s, 0.1f, 3.0f);
-    ImGui::SliderFloat("k", &ssao_k, 0.1f, 3.0f);
+    ImGui::SliderInt("Samples", &ssao.samples_near, 0, 30);
+    ImGui::SliderFloat("Delta", &ssao.delta, 0.0001f, 0.01f, "%.4f", 2.0f);
+    ImGui::SliderFloat("Range", &ssao.range, 0.1f, 3.0f);
+    ImGui::SliderFloat("s", &ssao.s, 0.1f, 3.0f);
+    ImGui::SliderFloat("k", &ssao.k, 0.1f, 3.0f);
     ImGui::Text("A-Trous");
     ImGui::Separator();
-    ImGui::SliderInt("Passes", &ssao_atrous_passes, 0, 5);
-    ImGui::SliderFloat("n_phi", &ssao_atrous_n_phi, .001f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("p_phi", &ssao_atrous_p_phi, .001f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Step Width", &ssao_atrous_step_width, 0.5f, 2.0f, "%.3f");
+    ImGui::SliderInt("Passes", &ssao.atrous_passes, 0, 5);
+    ImGui::SliderFloat("n_phi", &ssao.atrous_n_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("p_phi", &ssao.atrous_p_phi, .001f, 10.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Step WINDOW_WIDTH", &ssao.atrous_step_width, 0.5f, 2.0f, "%.3f");
     ImGui::TreePop();
   }
 
-  ImGui::Checkbox("##fxaa", &fxaa_enabled);
+  ImGui::Checkbox("##fxaa", &fxaa.enabled);
   ImGui::SameLine();
   if (ImGui::TreeNode("FXAA"))
   {
-    ImGui::SliderFloat("Abs. Threshold", &fxaa_contrastThreshold, .03f, .09f);
-    ImGui::SliderFloat("Rel. Threshold", &fxaa_relativeThreshold, .125f, .25f);
-    ImGui::SliderFloat("Pixel Blend", &fxaa_pixelBlendStrength, 0.0f, 1.0f);
-    ImGui::SliderFloat("Edge Blend", &fxaa_edgeBlendStrength, 0.0f, 1.0f);
+    ImGui::SliderFloat("Abs. Threshold", &fxaa.contrastThreshold, .03f, .09f);
+    ImGui::SliderFloat("Rel. Threshold", &fxaa.relativeThreshold, .125f, .25f);
+    ImGui::SliderFloat("Pixel Blend", &fxaa.pixelBlendStrength, 0.0f, 1.0f);
+    ImGui::SliderFloat("Edge Blend", &fxaa.edgeBlendStrength, 0.0f, 1.0f);
     ImGui::TreePop();
   }
 
@@ -1197,7 +1198,7 @@ void Renderer::DrawUI()
     ImGui::Separator();
 
     ImGui::SliderInt("Blur passes", &BLUR_PASSES, 0, 5);
-    ImGui::SliderInt("Blur width", &BLUR_STRENGTH, 0, 6);
+    ImGui::SliderInt("Blur WINDOW_WIDTH", &BLUR_STRENGTH, 0, 6);
     ImGui::SliderFloat("(VSM) Hardness", &vlightBleedFix, 0.0f, 1.0f, "%.3f");
     ImGui::SliderFloat("(ESM) C", &eConstant, 60, 90);
     if (ImGui::Checkbox("Generate Mips", &shadow_gen_mips))
@@ -1235,9 +1236,9 @@ void Renderer::DrawUI()
   
   glm::vec2 mp = magnifierLock ? magnifier_lastMouse : Input::GetScreenPos();
   magnifier_lastMouse = mp;
-  mp.y = HEIGHT - mp.y;
-  mp /= glm::vec2(WIDTH, HEIGHT);
-  float ar = (float)WIDTH / (float)HEIGHT;
+  mp.y = WINDOW_HEIGHT - mp.y;
+  mp /= glm::vec2(WINDOW_WIDTH, WINDOW_HEIGHT);
+  float ar = (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT;
   glm::vec2 uv0{ mp.x - magnifierScale, mp.y + magnifierScale * ar };
   glm::vec2 uv1{ mp.x + magnifierScale, mp.y - magnifierScale * ar };
   uv0 = glm::clamp(uv0, glm::vec2(0), glm::vec2(1));
@@ -1254,8 +1255,8 @@ void Renderer::ApplyTonemapping(float dt)
 
   const float logLowLum = glm::log(targetLuminance / maxExposure);
   const float logMaxLum = glm::log(targetLuminance / minExposure);
-  const int computePixelsX = WIDTH / 2;
-  const int computePixelsY = HEIGHT / 2;
+  const int computePixelsX = WINDOW_WIDTH / 2;
+  const int computePixelsY = WINDOW_HEIGHT / 2;
 
   {
     auto& hshdr = Shader::shaders["generate_histogram"];
@@ -1292,7 +1293,7 @@ void Renderer::ApplyTonemapping(float dt)
   }
 
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-  glViewport(0, 0, WIDTH, HEIGHT);
+  glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
   auto& shdr = Shader::shaders["tonemap"];
   glDepthMask(GL_FALSE);
   glDisable(GL_DEPTH_TEST);

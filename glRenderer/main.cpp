@@ -22,12 +22,14 @@ int main()
 // TODO list (unordered)
 // PCF
 // tiled/clustered shading
-// correctly account for shininess term in SSR
+// complex SSR (for very shiny surfaces, fallback to IBL if no surface hit)
 // fix normal mapping (again)
 // more flexible model loader (assimp or similar)
+// RSM?
 
 // DONE
 // imgui
+// SSR
 // VSM
 // ESM
 // fix normal mapping
