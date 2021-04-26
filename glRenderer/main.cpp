@@ -26,6 +26,7 @@ int main()
 // fix normal mapping (again)
 // more flexible model loader (assimp or similar)
 // RSM?
+// TAA?
 
 // DONE
 // imgui

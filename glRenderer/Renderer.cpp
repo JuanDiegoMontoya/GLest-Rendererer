@@ -269,6 +269,7 @@ void Renderer::MainLoop()
       gbufBindless->SetVec3("u_albedoOverride", albedoOverride);
       gbufBindless->SetFloat("u_roughnessOverride", roughnessOverride);
       gbufBindless->SetFloat("u_metalnessOverride", metalnessOverride);
+      gbufBindless->SetFloat("u_AOoverride", AOoverride);
       gbufBindless->SetFloat("u_ambientOcclusionOverride", ambientOcclusionOverride);
       uniformBuffer.BindBase(GL_SHADER_STORAGE_BUFFER, 0);
       materialsBuffer->BindBase(GL_SHADER_STORAGE_BUFFER, 1);
@@ -1008,11 +1009,13 @@ void Renderer::DrawUI(float dt)
     ImGui::Text("PBR/IBL");
     {
       ImGui::Checkbox("Material Override", &materialOverride);
+      ImGui::Checkbox("Override AO", &AOoverride);
       ImGui::Checkbox("Draw PBR Grid", &drawPbrSphereGridQuestionMark);
       ImGui::SliderInt("Num Env Samples", &numEnvSamples, 1, 100);
       ImGui::ColorEdit3("Albedo Override", &albedoOverride[0]);
       ImGui::SliderFloat("Roughness Override", &roughnessOverride, 0.0f, 1.0f);
       ImGui::SliderFloat("Metalness Override", &metalnessOverride, 0.0f, 1.0f);
+      ImGui::SliderFloat("AO Override", &ambientOcclusionOverride, 0.0f, 1.0f);
     }
     ImGui::TreePop();
   }
@@ -1136,8 +1139,8 @@ void Renderer::DrawUI(float dt)
     ImGui::SameLine(); ImGui::RadioButton("One", &passes, 1);
     ImGui::SameLine(); ImGui::RadioButton("Two", &passes, 2);
     volumetrics.atrous_passes = passes;
-    ImGui::SliderFloat("volumetrics.c_phi", &volumetrics.c_phi, .0001f, 10.0f, "%.4f", 4.0f);
-    ImGui::SliderFloat("Step WINDOW_WIDTH", &volumetrics.stepWidth, 0.5f, 2.0f, "%.3f");
+    ImGui::SliderFloat("c_phi", &volumetrics.c_phi, .0001f, 10.0f, "%.4f", 4.0f);
+    ImGui::SliderFloat("Step Width", &volumetrics.stepWidth, 0.5f, 2.0f, "%.3f");
 
     ImGui::TreePop();
   }
@@ -1170,7 +1173,7 @@ void Renderer::DrawUI(float dt)
     ImGui::SliderInt("Passes", &ssao.atrous_passes, 0, 5);
     ImGui::SliderFloat("n_phi", &ssao.atrous_n_phi, .001f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("p_phi", &ssao.atrous_p_phi, .001f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Step WINDOW_WIDTH", &ssao.atrous_step_width, 0.5f, 2.0f, "%.3f");
+    ImGui::SliderFloat("Step Width", &ssao.atrous_step_width, 0.5f, 2.0f, "%.3f");
     ImGui::TreePop();
   }
 
@@ -1197,8 +1200,8 @@ void Renderer::DrawUI(float dt)
     ImGui::RadioButton("MSM", &shadow_method, SHADOW_METHOD_MSM);
     ImGui::Separator();
 
-    ImGui::SliderInt("Blur passes", &BLUR_PASSES, 0, 5);
-    ImGui::SliderInt("Blur WINDOW_WIDTH", &BLUR_STRENGTH, 0, 6);
+    ImGui::SliderInt("Blur Passes", &BLUR_PASSES, 0, 5);
+    ImGui::SliderInt("Blur Width", &BLUR_STRENGTH, 0, 6);
     ImGui::SliderFloat("(VSM) Hardness", &vlightBleedFix, 0.0f, 1.0f, "%.3f");
     ImGui::SliderFloat("(ESM) C", &eConstant, 60, 90);
     if (ImGui::Checkbox("Generate Mips", &shadow_gen_mips))
@@ -1223,8 +1226,8 @@ void Renderer::DrawUI(float dt)
     ImGui::SliderFloat("Lum Target", &hdr.targetLuminance, 0.01f, 1.0f);
     ImGui::SliderFloat("Exposure Factor", &hdr.exposureFactor, 0.01f, 10.0f, "%.3f", 2.0f);
     ImGui::SliderFloat("Adjustment Speed", &hdr.adjustmentSpeed, 0.0f, 10.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Min exposure", &hdr.minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
-    ImGui::SliderFloat("Max exposure", &hdr.maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Min Exposure", &hdr.minExposure, 0.01f, 100.0f, "%.3f", 2.0f);
+    ImGui::SliderFloat("Max Exposure", &hdr.maxExposure, 0.01f, 100.0f, "%.3f", 2.0f);
 
     ImGui::TreePop();
   }

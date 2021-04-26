@@ -15,7 +15,8 @@ layout (location = 3) uniform bool u_materialOverride;
 layout (location = 4) uniform vec3 u_albedoOverride;
 layout (location = 5) uniform float u_roughnessOverride;
 layout (location = 6) uniform float u_metalnessOverride;
-layout (location = 7) uniform float u_ambientOcclusionOverride;
+layout (location = 7) uniform bool u_AOoverride;
+layout (location = 8) uniform float u_ambientOcclusionOverride;
 
 layout (binding = 1, std430) readonly buffer Materials
 {
@@ -76,6 +77,10 @@ void main()
     gAlbedo.rgb = u_albedoOverride;
     gRMA[0] = u_roughnessOverride;
     gRMA[1] = u_metalnessOverride;
+    gRMA[2] = u_ambientOcclusionOverride;
+  }
+  if (u_AOoverride)
+  {
     gRMA[2] = u_ambientOcclusionOverride;
   }
 }

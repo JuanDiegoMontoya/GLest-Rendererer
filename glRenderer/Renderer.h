@@ -149,6 +149,21 @@ private:
     int binarySearchSteps{ 5 };
   }ssr;
 
+  struct HDRConfig
+  {
+    GLuint fbo{};
+    GLuint colorTex{};
+    GLuint depthTex{};
+    std::unique_ptr<StaticBuffer> histogramBuffer;
+    std::unique_ptr<StaticBuffer> exposureBuffer;
+    float targetLuminance{ .22f };
+    float minExposure{ .1f };
+    float maxExposure{ 100.0f };
+    float exposureFactor{ 1.0f };
+    float adjustmentSpeed{ 2.0f };
+    const int NUM_BUCKETS{ 128 };
+  }hdr;
+
   // camera
   Camera cam;
   float fovDeg = 80.0f;
@@ -180,6 +195,7 @@ private:
   glm::vec3 albedoOverride{ 0.129f, 0.643f, 0.921f };
   float roughnessOverride{ 0.5f };
   float metalnessOverride{ 1.0f };
+  bool AOoverride{ false };
   float ambientOcclusionOverride{ 1.0f };
 
   std::unique_ptr<Texture2D> bluenoiseTex;
@@ -222,22 +238,6 @@ private:
   GLuint msmShadowMoments{};
   GLuint msmShadowMomentsBlur{};
   float msmA = 3e-5f; // unused
-
-  // HDR stuff
-  struct HDRConfig
-  {
-    GLuint fbo{};
-    GLuint colorTex{};
-    GLuint depthTex{};
-    std::unique_ptr<StaticBuffer> histogramBuffer;
-    std::unique_ptr<StaticBuffer> exposureBuffer;
-    float targetLuminance{ .22f };
-    float minExposure{ .1f };
-    float maxExposure{ 100.0f };
-    float exposureFactor{ 1.0f };
-    float adjustmentSpeed{ 2.0f };
-    const int NUM_BUCKETS{ 128 };
-  }hdr;
 
   GLint uiViewBuffer{};
 };
