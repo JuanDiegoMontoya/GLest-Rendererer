@@ -9,12 +9,13 @@ layout (location = 3, binding = 3) uniform sampler2D u_blueNoise;
 layout (location = 4) uniform mat4 u_invViewProj;
 layout (location = 5) uniform mat4 u_lightMatrix;
 layout (location = 6) uniform ivec2 u_screenSize;
-layout (location = 8) uniform int NUM_STEPS = 50;
-layout (location = 9) uniform float intensity = .02;
-layout (location = 10) uniform float distToFull = 20.0;
-layout (location = 11) uniform float noiseOffset = 1.0;
+layout (location = 8) uniform int NUM_STEPS = 32;
+layout (location = 9) uniform float intensity = .025;
+layout (location = 10) uniform float noiseOffset = 1.0;
+layout (location = 11) uniform float u_beerPower = 1.0;
+layout (location = 12) uniform float u_powderPower = 1.0;
 
-layout (location = 0) out vec4 fragColor;
+layout (location = 0) out float fragColor;
 
 float Shadow(vec4 lightSpacePos)
 {
@@ -48,5 +49,10 @@ void main()
     rayPos += rayDir * rayStep;
   }
 
-  fragColor = vec4(vec3((totalDistance / distToFull) * intensity * (accum / NUM_STEPS)), 1.0);
+  const float d = accum * rayStep * intensity;
+  const float powder = 1.0 - exp(-d * 2.0 * u_powderPower);
+  const float beer = exp(-d * u_beerPower);
+
+  fragColor = (1.0 - beer) * powder;
+  //fragColor = (totalDistance / distToFull) * intensity * (accum / NUM_STEPS);
 }

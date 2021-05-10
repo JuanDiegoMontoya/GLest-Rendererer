@@ -110,14 +110,15 @@ private:
     int atrous_passes = 1;
     const uint32_t framebuffer_width = WINDOW_WIDTH;
     const uint32_t framebuffer_height = WINDOW_HEIGHT;
-    GLint steps{ 20 };
-    float intensity{ .1f };
-    float distToFull{ 20.0f };
+    GLint steps{ 32 };
+    float intensity{ .025f };
     float noiseOffset{ 1.0f };
+    float beerPower{ 1.0f };
+    float powderPower{ 1.0f };
 
     // a-trous filter stuff
     int atrousPasses{ 1 };
-    float c_phi{ 0.0001f };
+    float c_phi{ 0.04f };
     float stepWidth{ 1.0f };
     const float atrouskernel[25] = { // 5x5 gaussian kernel with std dev=1.75 (I think)
     1.0 / 256.0, 4.0 / 256.0, 6.0 / 256.0, 4.0 / 256.0, 1.0 / 256.0,

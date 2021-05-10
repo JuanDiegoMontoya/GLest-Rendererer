@@ -434,8 +434,9 @@ void Renderer::MainLoop()
       volumetric->SetIVec2("u_screenSize", volumetrics.framebuffer_width, volumetrics.framebuffer_height);
       volumetric->SetInt("NUM_STEPS", volumetrics.steps);
       volumetric->SetFloat("intensity", volumetrics.intensity);
-      volumetric->SetFloat("distToFull", volumetrics.distToFull);
       volumetric->SetFloat("noiseOffset", volumetrics.noiseOffset);
+      volumetric->SetFloat("u_beerPower", volumetrics.beerPower);
+      volumetric->SetFloat("u_powderPower", volumetrics.powderPower);
       glDrawArrays(GL_TRIANGLES, 0, 3);
 
       if (volumetrics.atrous_passes > 0)
@@ -446,13 +447,8 @@ void Renderer::MainLoop()
         auto& atrousFilter = Shader::shaders["atrous_volumetric"];
         atrousFilter->Bind();
         atrousFilter->SetInt("gColor", 0);
-        //atrousFilter->SetInt("gDepth", 1);
-        //atrousFilter->SetInt("gNormal", 2);
         atrousFilter->SetFloat("c_phi", volumetrics.c_phi);
-        //atrousFilter->SetFloat("n_phi", n_phi);
-        //atrousFilter->SetFloat("p_phi", p_phi);
         atrousFilter->SetFloat("stepwidth", volumetrics.stepWidth);
-        //atrousFilter->SetMat4("u_invViewProj", glm::inverse(cam.GetViewProj()));
         atrousFilter->SetIVec2("u_resolution", volumetrics.framebuffer_width, volumetrics.framebuffer_height);
         atrousFilter->Set1FloatArray("kernel[0]", volumetrics.atrouskernel);
         atrousFilter->Set2FloatArray("offsets[0]", volumetrics.atrouskerneloffsets);
@@ -509,8 +505,8 @@ void Renderer::MainLoop()
     {
       glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
       glBindFramebuffer(GL_FRAMEBUFFER, postprocessFbo);
-      glClear(GL_COLOR_BUFFER_BIT);
       glBlendFunc(GL_ONE, GL_ONE);
+      glClear(GL_COLOR_BUFFER_BIT);
       auto& fsshader = Shader::shaders["fstexture"];
       fsshader->Bind();
       fsshader->SetInt("u_texture", 0);
@@ -519,14 +515,20 @@ void Renderer::MainLoop()
       if (volumetrics.enabled)
       {
         if (volumetrics.atrous_passes % 2 == 0)
+        {
           glBindTextureUnit(0, volumetrics.tex); // 0 or 2 pass a-trous
+        }
         else
+        {
           glBindTextureUnit(0, volumetrics.atrousTex); // 1 pass a-trous
+        }
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDrawArrays(GL_TRIANGLES, 0, 3);
       }
       if (ssr.enabled)
       {
         glBindTextureUnit(0, ssr.tex);
+        glBlendFunc(GL_ONE, GL_ONE);
         glDrawArrays(GL_TRIANGLES, 0, 3);
       }
     }
@@ -535,6 +537,7 @@ void Renderer::MainLoop()
     ApplyTonemapping(dt);
 
     glBindFramebuffer(GL_FRAMEBUFFER, postprocessFbo);
+    glBlendFunc(GL_ONE, GL_ONE);
     glNamedFramebufferTexture(postprocessFbo, GL_COLOR_ATTACHMENT0, legitFinalImage, 0);
     if (fxaa.enabled)
     {
@@ -726,7 +729,6 @@ void Renderer::CreateFramebuffers()
   // create volumetrics texture + fbo + intermediate (for blurring)
   glCreateTextures(GL_TEXTURE_2D, 1, &volumetrics.tex);
   glTextureStorage2D(volumetrics.tex, 1, GL_R16F, volumetrics.framebuffer_width, volumetrics.framebuffer_height);
-  glTextureParameteriv(volumetrics.tex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
   glTextureParameteri(volumetrics.tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTextureParameteri(volumetrics.tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTextureParameteri(volumetrics.tex, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
@@ -756,6 +758,9 @@ void Renderer::CreateFramebuffers()
   {
     throw std::runtime_error("Failed to create a-trous framebuffer");
   }
+  GLint swizzleMaskVolumetric[] = { GL_RED, GL_RED, GL_RED, GL_RED };
+  glTextureParameteriv(volumetrics.tex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMaskVolumetric);
+  glTextureParameteriv(volumetrics.atrousTex, GL_TEXTURE_SWIZZLE_RGBA, swizzleMaskVolumetric);
 
   // create tone mapping buffers
   std::vector<int> zeros(hdr.NUM_BUCKETS, 0);
@@ -1056,6 +1061,20 @@ void Renderer::DrawUI(float dt)
     ImGui::TreePop();
   }
 
+  if (ImGui::TreeNode("Environment Map"))
+  {
+    for (auto& p : fss::directory_iterator("Resources/IBL"))
+    {
+      std::string str = p.path().string();
+      if (str.find(".irr") == std::string::npos && ImGui::Button(str.c_str()))
+      {
+        LoadEnvironmentMap(str);
+      }
+    }
+
+    ImGui::TreePop();
+  }
+
   if (ImGui::TreeNode("View Texture"))
   {
     ImGui::Image((void*)uiViewBuffer, ImVec2(300, 300), ImVec2(0, 1), ImVec2(1, 0));
@@ -1070,20 +1089,6 @@ void Renderer::DrawUI(float dt)
     ImGui::RadioButton("volumetrics.tex", &uiViewBuffer, volumetrics.tex);
     ImGui::RadioButton("postprocessColor", &uiViewBuffer, postprocessColor);
     ImGui::RadioButton("ssr.tex", &uiViewBuffer, ssr.tex);
-
-    ImGui::TreePop();
-  }
-
-  if (ImGui::TreeNode("Environment Map"))
-  {
-    for (auto& p : fss::directory_iterator("Resources/IBL"))
-    {
-      std::string str = p.path().string();
-      if (str.find(".irr") == std::string::npos && ImGui::Button(str.c_str()))
-      {
-        LoadEnvironmentMap(str);
-      }
-    }
 
     ImGui::TreePop();
   }
@@ -1129,6 +1134,8 @@ void Renderer::DrawUI(float dt)
     ImGui::Separator();
     ImGui::SliderInt("Steps", &volumetrics.steps, 1, 100);
     ImGui::SliderFloat("Intensity", &volumetrics.intensity, 0.0f, 1.0f, "%.3f", 3.0f);
+    ImGui::SliderFloat("Beer Power", &volumetrics.beerPower, 0.0f, 3.0f);
+    ImGui::SliderFloat("Powder Power", &volumetrics.powderPower, 0.0f, 3.0f);
     ImGui::SliderFloat("Offset", &volumetrics.noiseOffset, 0.0f, 1.0f);
 
     ImGui::Text((const char*)(u8"À-Trous"));
@@ -1357,7 +1364,7 @@ void Renderer::LoadScene1()
   batchedObjects.clear();
   Scene1Lights();
 
-  LoadEnvironmentMap("Resources/IBL/Arches_E_PineTree_3k.hdr");
+  LoadEnvironmentMap("Resources/IBL/14-Hamarikyu_Bridge_B_3k.hdr");
 
   auto sphereBatched = LoadObjBatch("Resources/Models/bunny.obj", materialManager, *vertexBuffer, *indexBuffer)[0];
 
