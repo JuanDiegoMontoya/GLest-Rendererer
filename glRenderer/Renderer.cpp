@@ -437,6 +437,9 @@ void Renderer::MainLoop()
       volumetric->SetFloat("noiseOffset", volumetrics.noiseOffset);
       volumetric->SetFloat("u_beerPower", volumetrics.beerPower);
       volumetric->SetFloat("u_powderPower", volumetrics.powderPower);
+      volumetric->SetFloat("u_distanceScale", volumetrics.distanceScale);
+      volumetric->SetFloat("u_heightOffset", volumetrics.heightOffset);
+      volumetric->SetFloat("u_hfIntensity", volumetrics.hfIntensity);
       glDrawArrays(GL_TRIANGLES, 0, 3);
 
       if (volumetrics.atrous_passes > 0)
@@ -1137,6 +1140,11 @@ void Renderer::DrawUI(float dt)
     ImGui::SliderFloat("Beer Power", &volumetrics.beerPower, 0.0f, 3.0f);
     ImGui::SliderFloat("Powder Power", &volumetrics.powderPower, 0.0f, 3.0f);
     ImGui::SliderFloat("Offset", &volumetrics.noiseOffset, 0.0f, 1.0f);
+
+    ImGui::Text("Height Fog");
+    ImGui::SliderFloat("Distance Scale", &volumetrics.distanceScale, 0.001f, 100.0f);
+    ImGui::SliderFloat("Height Offset", &volumetrics.heightOffset, -10.0f, 10.0f);
+    ImGui::SliderFloat("hfIntensity", &volumetrics.hfIntensity, 0.0f, 1.0f);
 
     ImGui::Text((const char*)(u8"À-Trous"));
     ImGui::Separator();

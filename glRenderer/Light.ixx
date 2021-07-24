@@ -14,7 +14,7 @@ export struct PointLight
   float linear{};
   float quadratic{};
   float radiusSquared{};
-  float _padding;
+  float _padding{};
 
   float CalcRadiusSquared(float epsilon) const
   {

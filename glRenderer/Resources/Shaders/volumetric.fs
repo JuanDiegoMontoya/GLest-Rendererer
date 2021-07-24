@@ -14,6 +14,9 @@ layout (location = 9) uniform float intensity = .025;
 layout (location = 10) uniform float noiseOffset = 1.0;
 layout (location = 11) uniform float u_beerPower = 1.0;
 layout (location = 12) uniform float u_powderPower = 1.0;
+layout (location = 13) uniform float u_distanceScale = 1.0;
+layout (location = 14) uniform float u_heightOffset = 0.0;
+layout (location = 15) uniform float u_hfIntensity = 1.0;
 
 layout (location = 0) out float fragColor;
 
@@ -33,7 +36,8 @@ float Shadow(vec4 lightSpacePos)
 
 void main()
 {
-  const vec3 rayEnd = WorldPosFromDepth(texture(gDepth, vTexCoord).r, u_screenSize, u_invViewProj);
+  float depth = texture(gDepth, vTexCoord).r;
+  const vec3 rayEnd = WorldPosFromDepth(depth, u_screenSize, u_invViewProj);
   const vec3 rayStart = WorldPosFromDepth(0, u_screenSize, u_invViewProj);
   const vec3 rayDir = normalize(rayEnd - rayStart);
   const float totalDistance = distance(rayStart, rayEnd);
@@ -54,5 +58,16 @@ void main()
   const float beer = exp(-d * u_beerPower);
 
   fragColor = (1.0 - beer) * powder;
-  //fragColor = (totalDistance / distToFull) * intensity * (accum / NUM_STEPS);
+
+  // the fog function is: f(x, y, z) = 1/(y)
+  // TODO: add clamp to fix edge cases
+  // TODO: handle rayEnd at far plane
+  vec3 rayStartC = rayStart;
+  vec3 rayEndC = rayEnd;
+  rayEndC += rayDir * u_distanceScale;
+  rayStartC.y = clamp(rayStartC.y + u_heightOffset, .001, 10000.0);
+  rayEndC.y = clamp(rayEndC.y + u_heightOffset, .001, 10000.0);
+  float mag = length(rayEndC - rayStartC);
+  float scatter = mag * (1.0 / (rayStartC.y - rayEndC.y)) * (log(abs(rayStartC.y)) - log(abs(rayEndC.y)));
+  fragColor += scatter * u_hfIntensity;
 }

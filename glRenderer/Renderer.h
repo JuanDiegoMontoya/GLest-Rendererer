@@ -115,6 +115,10 @@ private:
     float noiseOffset{ 1.0f };
     float beerPower{ 1.0f };
     float powderPower{ 1.0f };
+    
+    float distanceScale{ 1.0f };
+    float heightOffset{ 0.0f };
+    float hfIntensity{ .025f };
 
     // a-trous filter stuff
     int atrousPasses{ 1 };
