@@ -99,6 +99,7 @@ Texture2D::Texture2D(const TextureCreateInfo& createInfo)
   }
 
   bindlessHandle_ = glGetTextureHandleARB(id_);
+  //Wstd::cout << bindlessHandle_ << '\n';
   glMakeTextureHandleResidentARB(bindlessHandle_);
 }
 

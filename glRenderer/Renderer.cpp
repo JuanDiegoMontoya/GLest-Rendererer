@@ -73,7 +73,7 @@ void Renderer::MainLoop()
 {
   TextureCreateInfo createInfo
   {
-    .path = "Resources/Textures/bluenoise_32.png",
+    .path = "Resources/Textures/bluenoise_64.png",
     .sRGB = false,
     .generateMips = false,
     .HDR = false,
